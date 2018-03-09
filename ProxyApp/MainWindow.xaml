@@ -8,7 +8,7 @@
         Title="ProxyApp" Height="471.209" Width="587.91" Topmost="True">
     <Grid>
 
-        <ListBox Name="Requests" ItemsSource="{Binding RequestsList}"  HorizontalAlignment="Left" Height="389" Margin="10,10,0,0" VerticalAlignment="Top" Width="311"/>
+        <ListBox ItemsSource="{Binding RequestsList}"  HorizontalAlignment="Left" Height="389" Margin="10,10,0,0" VerticalAlignment="Top" Width="311"/>
         <Button Content="Clear log" HorizontalAlignment="Left" Margin="10,409,0,0" VerticalAlignment="Top" Width="157"/>
         <Button Content="Start" HorizontalAlignment="Left" Margin="440,10,0,0" VerticalAlignment="Top" Width="129" Click="StartBtn_Click" />
         <TextBox HorizontalAlignment="Left" Height="23" Margin="444,60,0,0" TextWrapping="Wrap" Text="8080" VerticalAlignment="Top" Width="129"/>

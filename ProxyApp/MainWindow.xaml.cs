@@ -22,6 +22,7 @@ namespace ProxyApp
     public partial class MainWindow : Window
     {
         public ObservableCollection<string> RequestsList { get; set; }
+        public ObservableCollection<Request> Requests { get; set; }
 
         public MainWindow()
         {
@@ -36,6 +37,11 @@ namespace ProxyApp
         {
             Console.WriteLine("Starting the server.");
             RequestsList.Add("Listening for requests.");
+        }
+
+        public void AddRequestToLog(Request request)
+        {
+            Requests.Add(request);
         }
     }
 }
