@@ -21,8 +21,9 @@ namespace ProxyApp
     /// </summary>
     public partial class MainWindow : Window
     {
+        private RequestHandler RequestHandler;
         public ObservableCollection<string> RequestsList { get; set; }
-        public ObservableCollection<Request> Requests { get; set; }
+        //public ObservableCollection<Request> Requests { get; set; }
 
         public MainWindow()
         {
@@ -30,18 +31,24 @@ namespace ProxyApp
             InitializeComponent();
             DataContext = this;
             //RequestsList.AddRequest("Listening");
-            
         }
 
         private void StartBtn_Click(object sender, RoutedEventArgs e)
         {
-            Console.WriteLine("Starting the server.");
-            RequestsList.Add("Listening for requests.");
+            RequestHandler = new RequestHandler(this);
+            //Console.WriteLine("Starting the server.");
+            RequestHandler.Listen();
+            AddToLog("Listening for requests.");
         }
 
-        public void AddRequestToLog(Request request)
+        public void AddToLog(string request)
         {
-            Requests.Add(request);
+            if(!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(() => AddToLog(request));
+                return;
+            }
+            RequestsList.Add(request);
         }
     }
 }
