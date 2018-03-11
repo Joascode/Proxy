@@ -14,7 +14,6 @@ E:\ProgrammingProjects\WIN\ProxyApp\ProxyApp\obj\Debug\ProxyApp.csproj.CoreCompi
 E:\ProgrammingProjects\WIN\ProxyApp\ProxyApp\obj\Debug\ProxyApp.exe
 E:\ProgrammingProjects\WIN\ProxyApp\ProxyApp\obj\Debug\ProxyApp.pdb
 E:\ProgrammingProjects\WIN\ProxyApp\ProxyApp\obj\Debug\App.baml
-E:\ProgrammingProjects\WIN\ProxyApp\ProxyApp\obj\Debug\GeneratedInternalTypeHelper.g.cs
 C:\Users\Boontje\source\repos\Proxy\ProxyApp\bin\Debug\ProxyApp.exe.config
 C:\Users\Boontje\source\repos\Proxy\ProxyApp\bin\Debug\ProxyApp.exe
 C:\Users\Boontje\source\repos\Proxy\ProxyApp\bin\Debug\ProxyApp.pdb
