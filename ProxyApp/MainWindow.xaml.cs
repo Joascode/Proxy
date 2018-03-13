@@ -89,8 +89,12 @@ namespace ProxyApp
                         AddToLog("Please enter a positive port number.");
                     } else
                     {
-                        if (requestHandler != null) AddToLog("Can't change port while listening.");
-                        else AddToLog($"Changed port to: {port}");
+                        if (requestHandler == null) AddToLog("Can't change port while listening.");
+                        else
+                        {
+                            requestHandler.Port = port;
+                            AddToLog($"Changed port to: {port}");
+                        }
                     }
                 }
             }
@@ -126,17 +130,44 @@ namespace ProxyApp
         private void ContentInCheck_Click(object sender, RoutedEventArgs e)
         {
             filterRequest = (bool) ContentInCheckBox.IsChecked;
+            AddToLog("Filtering out the Requests.");
         }
 
         private void ContentUitCheck_Click(object sender, RoutedEventArgs e)
         {
             filterResponse = (bool)ContentUitCheckBox.IsChecked;
+            AddToLog("Filtering out the Responses.");
         }
 
         private void HeaderEditCheck_Click(object sender, RoutedEventArgs e)
         {
             //Catch error when proxy isn't listening yet.
-            requestHandler.RemoveBrowser = (bool)HeaderEditCheckBox.IsChecked;
+            if(requestHandler == null)
+            {
+                AddToLog("Please start the proxy first.");
+                HeaderEditCheckBox.IsChecked = false;
+            } else
+            {
+                requestHandler.RemoveBrowser = (bool)HeaderEditCheckBox.IsChecked;
+                AddToLog("Deleting User-Agent header.");
+            }
+            
+        }
+
+        private void ContentFilterCheck_Click(object sender, RoutedEventArgs e)
+        {
+            if (requestHandler == null)
+            {
+                AddToLog("Please start the proxy first.");
+                ContentFilterCheckBox.IsChecked = false;
+            }
+            else
+            {
+                requestHandler.BlockImages = (bool)ContentFilterCheckBox.IsChecked;
+
+                if ((bool)ContentFilterCheckBox.IsChecked) AddToLog("Replacing images with placeholder.");
+                else AddToLog("Allowing images.");
+            }
         }
 
         public void AddToLog(string request)

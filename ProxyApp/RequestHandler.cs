@@ -8,6 +8,7 @@ using System.Security;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using static System.Net.WebRequestMethods;
 
 namespace ProxyApp
 {
@@ -18,13 +19,28 @@ namespace ProxyApp
         TcpClient client;
         NetworkStream ns;
         private StringBuilder sb = new StringBuilder();
-        private static readonly string[] _imageExtensions = { "jpg", "bmp", "gif", "png" };
+        private static readonly string[] _imageExtensions = { "jpg", "bmp", "gif", "png", "jpeg" };
+
+        private Dictionary<string, Message> CachedMessages = new Dictionary<string, Message>();
         
         private Action<string, Types> callback2;
         public enum Types
         {
             request,
             response
+        }
+
+        private bool blockImages;
+        public bool BlockImages
+        {
+            get
+            {
+                return blockImages;
+            }
+            set
+            {
+                blockImages = value;
+            }
         }
 
         private bool removeBrowser;
@@ -106,24 +122,52 @@ namespace ProxyApp
         {
             using (ns = client.GetStream())
             {
+                //Change to work with byte array. Use message object to handle string variation of returned message.
                 string message = ReadMessage();
 
                 if (removeBrowser) message = RemoveBrowserHeader(message);
 
+                //Retrieve string array from message object to use the string variation of the byte array.
                 callback(message, Types.request);
+
                 
+                //
+
+
+
+                Message response;
+                    //Url has to be returned from a method from the message object.
                 string url = GetUrlFromRequest(message);
-                if(url != null)
+                if (url != null)
                 {
-                    //Make this more pretty. RequestForImage only requires url so this can be done inside ReachSite.
-                    if (RequestForImage(message)) url = "file:///E:/ProgrammingProjects/WIN/ProxyApp/ProxyApp/images/placeholder.png";
-                    string[] response = ReachSite(url);
-
-                    if(response !=  null)
+                    response = ReachSite(url);
+                    if (response != null)
                     {
-                        callback(response[0], Types.response);
+                        if (blockImages && RequestForImage(response.GetHeadersAsString()))
+                        {
+                            var newurl = "http://clipground.com/images/placeholder-clipart-6.jpg";
+                            response = ReachSite(newurl);
+                        }
 
-                        WriteMessage(response[1]);
+                        if (response != null)
+                        {
+                            //Retrieve string from message object to use the string variation of the byte array.
+                            callback(response.GetMessageAsLog(), Types.response);
+
+                            if(response.GetETag() != null)
+                            {
+                                
+                                if(!CachedMessages.ContainsKey(url))
+                                {
+                                    CachedMessages.Add(url, response);
+                                    Console.WriteLine("Cached site.");
+                                }
+                                   
+                            }
+
+                            //Change to work with byte array. Use message object to handle string variation of returned message.
+                            WriteMessage(response.GetBody());
+                        }
                     }
                 }
             }
@@ -131,6 +175,7 @@ namespace ProxyApp
             client.Close();
         }
 
+        //Change method to work with byte array.
         private string ReadMessage()
         {
             string message = "";
@@ -139,6 +184,7 @@ namespace ProxyApp
                 int messageLength = ns.Read(buffer, 0, buffer.Length);
                 sb.AppendFormat("{0}", Encoding.UTF8.GetString(buffer, 0, messageLength));
                 message = sb.ToString();
+                // message.ReadMessage(buffer, messageLength);
                 
             } while (client.GetStream().DataAvailable);
 
@@ -148,13 +194,14 @@ namespace ProxyApp
             return message;    
         }
 
-        private void WriteMessage(string message)
+        //Change method to work with byte array instead of string.
+        private void WriteMessage(byte[] message)
         {
             if (message != null)
             {
-                int messageSize = Encoding.UTF8.GetByteCount(message);
-                buffer = Encoding.UTF8.GetBytes(message);
-                ns.Write(buffer, 0, messageSize);
+                //int messageSize = Encoding.UTF8.GetByteCount(message);
+                //byte[] outBuffer = Encoding.UTF8.GetBytes(message);
+                ns.Write(message, 0, message.Length);
                 ns.Flush();
             }
             else
@@ -163,54 +210,69 @@ namespace ProxyApp
                 window.AddToLog("Requested site is not reachable.");
             }
 
-            buffer = new byte[bufferSize];
+            //buffer = new byte[bufferSize];
         }
 
-        private string[] ReachSite(string url)
+        //Change method to work with byte array and message object.
+        private Message ReachSite(string url)
         {
-            Uri uri = null;
-            Uri sysUri = null;
+            
             try
             {
-                if (url == "file:///E:/ProgrammingProjects/WIN/ProxyApp/ProxyApp/images/placeholder.png")
-                {
-                    sysUri = new Uri("E:\\ProgrammingProjects\\WIN\\ProxyApp\\ProxyApp\\images\\placeholder.png");
-                } else
-                {
-                    uri = new Uri(url);
-                }
+                var uri = new Uri(url);
                 try
                 {
-                    HttpWebRequest webRequest;
-                    if (sysUri != null)
+                    HttpWebRequest webRequest = (HttpWebRequest)WebRequest.Create(uri);
+                    if (CachedMessages.TryGetValue(url, out Message message))
                     {
-                        var sysConverted = sysUri.LocalPath;
-                        //This can't be done. It's a FileRequest and not a HttpWebRequest.
-                        //TODO: This can't be done. It's a FileRequest and not a HttpWebRequest.
-                        webRequest = (HttpWebRequest)WebRequest.Create(sysConverted);
-                    } else
-                    {
-                        webRequest = (HttpWebRequest)WebRequest.Create(uri);
+                        Console.WriteLine("Found ETag for url.");
+                        webRequest.Headers.Add("ETag:" + message.GetETag());
                     }
-                    
                     webRequest.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
                     try
                     {
                         using (HttpWebResponse response = (HttpWebResponse)webRequest.GetResponse())
-                        using (Stream stream = response.GetResponseStream())
-                        using (StreamReader reader = new StreamReader(stream))
+                        //using (Stream stream = response.GetResponseStream())
+                        //using (BinaryReader reader = new BinaryReader(stream))
                         {
-                            foreach (string header in response.Headers)
+                            Console.WriteLine((int)response.StatusCode);
+                            if (response.StatusCode.Equals("UNMODIFIED"))
+                            {
+                                Console.WriteLine("Return cached.");
+                                return message;
+                            }
+
+                            byte[] data; // will eventually hold the result
+                                         // create a MemoryStream to build the result
+                            using (var mstrm = new MemoryStream())
+                            {
+                                using (var stream = response.GetResponseStream())
+                                {
+                                    var tempBuffer = new byte[4096];
+                                    int bytesRead;
+                                    while ((bytesRead = stream.Read(tempBuffer, 0, tempBuffer.Length)) != 0)
+                                    {
+                                        mstrm.Write(tempBuffer, 0, bytesRead);
+                                    }
+                                }
+                                mstrm.Flush();
+                                data = mstrm.GetBuffer();
+                            }
+                            /*foreach (string header in response.Headers)
                                 sb.AppendFormat("{0}:{1} \n", header, response.Headers[header]);
                             sb.Append("\n");
-                            sb.Append("\n");
+                            sb.Append("\n");*/
 
-                            string headers = sb.ToString();
-                            string message = reader.ReadToEnd();
+                            //string headers = sb.ToString();
+                            //Console.WriteLine(response.ContentLength);
+                            //byte[] message = reader.ReadBytes((int)response.ContentLength);
 
-                            sb.Clear();
+                            Message messageObj = new Message(response.Headers, data);
+                            
 
-                            return new string[] { headers, message };
+                            //sb.Clear();
+
+                            return messageObj;
                         }
                     }
                     catch (Exception e) when (
@@ -255,18 +317,23 @@ namespace ProxyApp
                 return tokens[1];
             }
             else return null;
-            
         }
 
         private bool RequestForImage(string request)
         {
-            string[] headers = request.Split(' ');
-            foreach(string imageType in _imageExtensions)
+            string[] headers = request.Split('\n');
+            foreach (string header in headers)
             {
-                if (headers[1].EndsWith(imageType))
+                if (header.StartsWith("Content-Type:"))
                 {
-                    Console.WriteLine("Request for image made.");
-                    return true;
+                    foreach(string imageType in _imageExtensions)
+                    {
+                        if(header.EndsWith(imageType+" "))
+                        {
+                            Console.WriteLine("Bingo! " + header);
+                            return true;
+                        }
+                    }
                 }
             }
 
@@ -280,7 +347,6 @@ namespace ProxyApp
             {
                 if(!header.StartsWith("User-Agent:"))
                 {
-                    Console.WriteLine(header);
                     sb.Append(header);
                 }
             }
@@ -293,10 +359,34 @@ namespace ProxyApp
         private string ChangeImageRequest(string request)
         {
             string[] headers = request.Split(' ');
-            string newUrl = "127.0.0.1:8080/images/placeholder.png";
+            string newUrl = "http://clipground.com/images/placeholder-clipart-6.jpg";
             headers[1] = newUrl;
 
             return newUrl;
+        }
+
+        private string GrabETag(string request)
+        {
+            string[] headers = request.Split('\n');
+            foreach (string header in headers)
+            {
+                Console.WriteLine(header);
+                if (header.StartsWith("ETag:"))
+                {
+                    var newheader = header.Split(':');
+                    Console.WriteLine(newheader);
+                    sb.Append(newheader[1]);
+                }
+            }
+            string ETag = sb.ToString();
+            sb.Clear();
+
+            return ETag;
+        }
+
+        private bool InCache(string ETag)
+        {
+            return CachedMessages.ContainsKey(ETag);
         }
     }
 }
