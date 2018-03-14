@@ -14,6 +14,7 @@ namespace ProxyApp
         MainWindow window;
         TcpListener listener;
         TcpClient client;
+        private static readonly string[] _imageExtensions = { "jpg", "png", "bmp", "gif" };
         byte[] buffer = new byte[1024];
 
         public RequestHandler(MainWindow window)
@@ -48,12 +49,20 @@ namespace ProxyApp
                 completeMessage += message;
             } while (client.GetStream().DataAvailable);
 
-            window.AddToLog(completeMessage);
+            
 
 
             string url = GetUrlFromRequest(completeMessage);
 
             string requestSite = ReachSite(url);
+            window.AddToLog(requestSite);
+            if(RequestForImage(completeMessage))
+            {
+                Console.WriteLine("An image request has been made.");
+            } else
+            {
+                window.AddToLog(completeMessage);
+            }
 
             if(requestSite != "")
             {
@@ -96,6 +105,18 @@ namespace ProxyApp
         {
             string[] tokens = request.Split(' ');
             return tokens[1];
+        }
+
+        private bool RequestForImage(string request)
+        {
+            string[] headers = request.Split(' ');
+
+            foreach(string imageType in _imageExtensions)
+            {
+                if (headers[1].EndsWith(imageType)) return true;
+            }
+
+            return false;
         }
     }
 }
