@@ -103,7 +103,11 @@ namespace ProxyApp
                 try
                 {
                     client = await listener.AcceptTcpClientAsync();
-                    await Task.Run(() => HandleMessages(callback));
+                    if(client != null)
+                    {
+                        await Task.Run(() => HandleMessages(callback));
+                    }
+                    
                 } catch(InvalidOperationException)
                 {
                     //Geen nette manier van sluiten, maar nu geen tijd voor.
@@ -118,35 +122,35 @@ namespace ProxyApp
             listener.Stop();
         }
 
+
+        //REVAMP TO SUPPORTS 4-way MESSAGES. Client > Proxy > Server > Proxy > Client.
         private void HandleMessages(Action<string, Types> callback)
         {
             using (ns = client.GetStream())
             {
                 //Change to work with byte array. Use message object to handle string variation of returned message.
-                string message = ReadMessage();
+                string request = ReadMessage();
 
-                if (removeBrowser) message = RemoveBrowserHeader(message);
+                if (removeBrowser) request = RemoveBrowserHeader(request);
 
                 //Retrieve string array from message object to use the string variation of the byte array.
-                callback(message, Types.request);
+                callback(request, Types.request);
 
-                
-                //
-
-
+                //TODO: Still need to cache responses based on DateTime.
 
                 Message response;
                     //Url has to be returned from a method from the message object.
-                string url = GetUrlFromRequest(message);
+                string url = GetUrlFromRequest(request);
+                Console.WriteLine(url);
                 if (url != null)
                 {
-                    response = ReachSite(url);
+                    response = ReachSite(url, request);
                     if (response != null)
                     {
                         if (blockImages && RequestForImage(response.GetHeadersAsString()))
                         {
                             var newurl = "http://clipground.com/images/placeholder-clipart-6.jpg";
-                            response = ReachSite(newurl);
+                            //response = ReachSite(newurl, message);
                         }
 
                         if (response != null)
@@ -154,7 +158,7 @@ namespace ProxyApp
                             //Retrieve string from message object to use the string variation of the byte array.
                             callback(response.GetMessageAsLog(), Types.response);
 
-                            if(response.GetETag() != null)
+                            /*if(response.GetETag() != null)
                             {
                                 
                                 if(!CachedMessages.ContainsKey(url))
@@ -163,7 +167,7 @@ namespace ProxyApp
                                     Console.WriteLine("Cached site.");
                                 }
                                    
-                            }
+                            }*/
 
                             //Change to work with byte array. Use message object to handle string variation of returned message.
                             WriteMessage(response.GetBody());
@@ -186,7 +190,7 @@ namespace ProxyApp
                 message = sb.ToString();
                 // message.ReadMessage(buffer, messageLength);
                 
-            } while (client.GetStream().DataAvailable);
+            } while (ns.DataAvailable);
 
             sb.Clear();
             buffer = new byte[bufferSize];
@@ -214,63 +218,71 @@ namespace ProxyApp
         }
 
         //Change method to work with byte array and message object.
-        private Message ReachSite(string url)
+        private Message ReachSite(string url, string message)
         {
-            
             try
             {
-                var uri = new Uri(url);
+                //var uri = new Uri(url);
                 try
                 {
-                    HttpWebRequest webRequest = (HttpWebRequest)WebRequest.Create(uri);
-                    if (CachedMessages.TryGetValue(url, out Message message))
-                    {
-                        Console.WriteLine("Found ETag for url.");
-                        webRequest.Headers.Add("ETag:" + message.GetETag());
-                    }
-                    webRequest.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+                    //TODO: Rewrite to TcpClient.
+                    TcpClient server = new TcpClient();
+                    //Doesn't send header yet.
+                    server.Connect(url, 80);
+
+                    //if (CachedMessages.TryGetValue(url, out Message message))
+                    //{
+                    //   Console.WriteLine("Found ETag for url.");
+                    //    webRequest.Headers.Add("ETag:" + message.GetETag());
+                    //}
+
                     try
                     {
-                        using (HttpWebResponse response = (HttpWebResponse)webRequest.GetResponse())
-                        //using (Stream stream = response.GetResponseStream())
-                        //using (BinaryReader reader = new BinaryReader(stream))
+                        //TODO: Luister naar networkstream van de nieuwe TcpClient voor de response.
+                        using (NetworkStream response = server.GetStream())
                         {
-                            Console.WriteLine((int)response.StatusCode);
+                            byte[] request = Encoding.ASCII.GetBytes(message);
+                            response.Write(request, 0, request.Length);
+                            /*Console.WriteLine((int)response.StatusCode);
                             if (response.StatusCode.Equals("UNMODIFIED"))
                             {
                                 Console.WriteLine("Return cached.");
                                 return message;
-                            }
+                            }*/
 
-                            byte[] data; // will eventually hold the result
-                                         // create a MemoryStream to build the result
+                            byte[] data;
+
+
                             using (var mstrm = new MemoryStream())
                             {
-                                using (var stream = response.GetResponseStream())
+                                var tempBuffer = new byte[1024];
+                                int bytesRead;
+                                if(response.DataAvailable)
                                 {
-                                    var tempBuffer = new byte[4096];
-                                    int bytesRead;
-                                    while ((bytesRead = stream.Read(tempBuffer, 0, tempBuffer.Length)) != 0)
+                                    do
                                     {
+                                        bytesRead = response.Read(tempBuffer, 0, tempBuffer.Length);
                                         mstrm.Write(tempBuffer, 0, bytesRead);
-                                    }
+
+                                    } while (response.DataAvailable);
                                 }
-                                mstrm.Flush();
+
+                                /*while ((bytesRead = response.Read(tempBuffer, 0, tempBuffer.Length)) > 0)
+                                {
+                                    mstrm.Write(tempBuffer, 0, bytesRead);
+                                }*/
+
                                 data = mstrm.GetBuffer();
+                                mstrm.Flush();
                             }
-                            /*foreach (string header in response.Headers)
-                                sb.AppendFormat("{0}:{1} \n", header, response.Headers[header]);
-                            sb.Append("\n");
-                            sb.Append("\n");*/
 
-                            //string headers = sb.ToString();
-                            //Console.WriteLine(response.ContentLength);
-                            //byte[] message = reader.ReadBytes((int)response.ContentLength);
+                            //Convert response to headers string.
+                            //Create function to parse data to retrieve headers and data.
+                            //string[] responseMsg = GetResponseAsString(data);
 
-                            Message messageObj = new Message(response.Headers, data);
-                            
+                            Message messageObj = new Message(data);
 
-                            //sb.Clear();
+                            server.Close();
 
                             return messageObj;
                         }
@@ -284,7 +296,7 @@ namespace ProxyApp
                     {
                         string errorMsg = "An error has occured. \n" +
                                 "Error: " + e.Message + "\n" +
-                                "Url: " + uri + "\n";
+                                "Url: " + url + "\n";
 
                         callback2(errorMsg, Types.response);
                         
@@ -311,12 +323,31 @@ namespace ProxyApp
 
         private string GetUrlFromRequest(string request)
         {
-            string[] tokens = request.Split(' ');
-            if (tokens.Length > 1)
+            string[] headers = request.Split('\n');
+            foreach(string header in headers)
             {
-                return tokens[1];
+                if(header.StartsWith("Host:"))
+                {
+                    Console.WriteLine(header);
+                    string[] host = header.Split(' ');
+                    foreach (string hosti in host) Console.WriteLine(hosti);
+                    return host[1].Split('\r')[0];
+                }
             }
-            else return null;
+            return null;
+            /*if (headers.Length > 1)
+            {
+                Console.WriteLine(headers[1]);
+                string[] url;
+                if(headers[1].StartsWith("https://"))
+                {
+                    url = headers[1].Split(new[] { "https://" }, StringSplitOptions.None);
+                }else //if(headers[1].StartsWith("http://"))
+                    url = headers[1].Split(new[] { "http://" }, StringSplitOptions.None);
+                Console.WriteLine(url[0]);
+                return url[0];
+            }*/
+            //else return null;
         }
 
         private bool RequestForImage(string request)

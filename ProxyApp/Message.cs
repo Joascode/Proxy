@@ -11,43 +11,43 @@ namespace ProxyApp
     {
         //Store the message object returned by a request and response.
 
-        byte[] message;
-        WebHeaderCollection headers;
+        byte[] byteMessage;
+        //string[] strMessage;
         StringBuilder sb = new StringBuilder();
 
         private static readonly string[] _imageExtensions = { "jpg", "bmp", "gif", "png", "jpeg" };
 
-        public Message(WebHeaderCollection headers, byte[] message)
+        public Message(byte[] byteMessage)
         {
-            this.message = message;
-            this.headers = headers;
+            this.byteMessage = byteMessage;
+            //this.strMessage = strMessage;
         }
 
         public string GetMessageAsLog()
         {
-            string body = Encoding.UTF8.GetString(message, 0, message.Length);
+            string body = Encoding.UTF8.GetString(byteMessage, 0, byteMessage.Length);
 
-            sb.Append(GetHeadersAsString());
-            sb.Append('\n');
-            sb.Append(body);
+            //sb.Append(GetHeadersAsString());
+            //sb.Append('\n');
+            //sb.Append(body);
 
-            string fullMsg = sb.ToString();
-            sb.Clear();
+            //string fullMsg = sb.ToString();
+            //sb.Clear();
 
-            return fullMsg;
+            return body;
         }
 
-        public string GetETag()
+        /*public string GetETag()
         {
             return headers["ETag"];
-        }
+        }*/
 
         public byte[] GetBody()
         {
-            return message;
+            return byteMessage;
         }
 
-        public string GetHeadersAsString()
+        /*public string GetHeadersAsString()
         {
             foreach(string header in headers)
             {
@@ -58,6 +58,15 @@ namespace ProxyApp
             sb.Clear();
 
             return stringMsg;
+        }*/
+
+        public string GetHeadersAsString()
+        {
+            string message = Encoding.ASCII.GetString(byteMessage, 0, byteMessage.Length);
+
+            string[] splitMessage = message.Split(new[] { "\r\n\r\n", "\n\n" }, StringSplitOptions.None);
+
+            return splitMessage[0];
         }
     }
 }
