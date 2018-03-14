@@ -68,5 +68,23 @@ namespace ProxyApp
 
             return splitMessage[0];
         }
+
+        private string AddBasicAuth(string headers)
+        {
+            string username = "admin";
+            string password = "admin";
+            string encoded = Convert.ToBase64String(Encoding.GetEncoding("ISO-8859-1").GetBytes(username + ":" + password));
+            string[] splitMessage = headers.Split(new[] { "\r\n\r\n", "\n\n" }, StringSplitOptions.None);
+            sb.Append(splitMessage[0]);
+            sb.Append("\n");
+            sb.Append("Proxy-Authorization: Basic " + encoded);
+            sb.Append("\r");
+            sb.Append("\n");
+
+            string newHeaders = sb.ToString();
+            sb.Clear();
+
+            return newHeaders;
+        }
     }
 }

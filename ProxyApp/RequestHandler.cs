@@ -84,6 +84,8 @@ namespace ProxyApp
             }
         }
 
+        private bool basicAuth = false;
+
         public RequestHandler(MainWindow window, int port, int bufferSize)
         {
             this.window = window;
@@ -132,6 +134,7 @@ namespace ProxyApp
                 string request = ReadMessage();
 
                 if (removeBrowser) request = RemoveBrowserHeader(request);
+                
 
                 //Retrieve string array from message object to use the string variation of the byte array.
                 callback(request, Types.request);
@@ -156,7 +159,21 @@ namespace ProxyApp
                         if (response != null)
                         {
                             //Retrieve string from message object to use the string variation of the byte array.
-                            callback(response.GetMessageAsLog(), Types.response);
+                            if (basicAuth)
+                            {
+                                if (CheckAuthentication(request))
+                                {
+                                    callback("User authenticated.", Types.response);
+                                    callback(response.GetMessageAsLog(), Types.response);
+                                }
+                                
+                            } else
+                            {
+                                //Change Types to allow responses that always are visible.
+                                callback("User not authenticated.", Types.response);
+                                callback(response.GetMessageAsLog(), Types.response);
+                            }
+                            
 
                             /*if(response.GetETag() != null)
                             {
@@ -176,7 +193,7 @@ namespace ProxyApp
                 }
             }
             
-            client.Close();
+            //client.Close();
         }
 
         //Change method to work with byte array.
@@ -187,10 +204,12 @@ namespace ProxyApp
             {
                 int messageLength = ns.Read(buffer, 0, buffer.Length);
                 sb.AppendFormat("{0}", Encoding.UTF8.GetString(buffer, 0, messageLength));
-                message = sb.ToString();
+                
                 // message.ReadMessage(buffer, messageLength);
                 
             } while (ns.DataAvailable);
+
+            message = sb.ToString();
 
             sb.Clear();
             buffer = new byte[bufferSize];
@@ -225,6 +244,7 @@ namespace ProxyApp
                 //var uri = new Uri(url);
                 try
                 {
+                    Console.WriteLine("Request: " + message);
                     //TODO: Rewrite to TcpClient.
                     TcpClient server = new TcpClient();
                     //Doesn't send header yet.
@@ -239,10 +259,12 @@ namespace ProxyApp
                     try
                     {
                         //TODO: Luister naar networkstream van de nieuwe TcpClient voor de response.
-                        using (NetworkStream response = server.GetStream())
+                        using (Stream response = server.GetStream())
                         {
                             byte[] request = Encoding.ASCII.GetBytes(message);
                             response.Write(request, 0, request.Length);
+
+
                             /*Console.WriteLine((int)response.StatusCode);
                             if (response.StatusCode.Equals("UNMODIFIED"))
                             {
@@ -250,37 +272,90 @@ namespace ProxyApp
                                 return message;
                             }*/
 
-                            byte[] data;
+                            /*byte[] data;
 
 
                             using (var mstrm = new MemoryStream())
                             {
                                 var tempBuffer = new byte[1024];
                                 int bytesRead;
-                                if(response.DataAvailable)
+                                if (response.CanRead)
                                 {
-                                    do
+                                    if (response.DataAvailable)
                                     {
-                                        bytesRead = response.Read(tempBuffer, 0, tempBuffer.Length);
-                                        mstrm.Write(tempBuffer, 0, bytesRead);
+                                        do
+                                        {
+                                            bytesRead = response.Read(tempBuffer, 0, tempBuffer.Length);
+                                            mstrm.Write(tempBuffer, 0, bytesRead);
 
-                                    } while (response.DataAvailable);
-                                }
-
-                                /*while ((bytesRead = response.Read(tempBuffer, 0, tempBuffer.Length)) > 0)
-                                {
-                                    mstrm.Write(tempBuffer, 0, bytesRead);
+                                        } while (response.DataAvailable);
+                                        while ((bytesRead = response.Read(tempBuffer, 0, tempBuffer.Length)) > 0)
+                                        {
+                                            mstrm.Write(tempBuffer, 0, bytesRead);
+                                        }
+                                    }
                                 }*/
 
-                                data = mstrm.GetBuffer();
-                                mstrm.Flush();
+                            //http://www.yoda.arachsys.com/csharp/readbinary.html
+                            byte[] buffer = new byte[1024];
+                            int read = 0;
+
+                            int chunk;
+                            while ((chunk = response.Read(buffer, read, buffer.Length - read)) > 0)
+                            {
+                                read += chunk;
+                                Console.WriteLine("Buffering.");
+                                // If we've reached the end of our buffer, check to see if there's
+                                // any more information
+                                if (read == buffer.Length)
+                                {
+                                    Console.WriteLine("End of buffer.");
+                                    int nextByte = response.ReadByte();
+
+                                    // End of stream? If so, we're done
+                                    if (nextByte == -1)
+                                    {
+                                        Console.WriteLine("Done reading stream.");
+                                        break;
+                                    }
+
+                                    // Nope. Resize the buffer, put in the byte we've just
+                                    // read, and continue
+                                    byte[] newBuffer = new byte[buffer.Length * 2];
+                                    Array.Copy(buffer, newBuffer, buffer.Length);
+                                    newBuffer[read] = (byte)nextByte;
+                                    buffer = newBuffer;
+                                    read++;
+                                }
                             }
+
+                            /*byte[] buffer = new byte[32768];
+                            byte[] byteMessage;
+                            using (MemoryStream ms = new MemoryStream())
+                            {
+                                while (true)
+                                {
+                                    int read = response.Read(buffer, 0, buffer.Length);
+                                    if (read <= 0)
+                                    {
+                                        byteMessage = ms.ToArray();
+                                        break;
+                                    }
+                                    ms.Write(buffer, 0, read);
+                                }
+                            }*/
+
+                            //data = mstrm.GetBuffer();
+                            Console.WriteLine("Data size: " + buffer.Length);
+                            Console.WriteLine("Response: " + Encoding.ASCII.GetString(buffer, 0 , buffer.Length));
+                            //mstrm.Flush();
+                            //}
 
                             //Convert response to headers string.
                             //Create function to parse data to retrieve headers and data.
                             //string[] responseMsg = GetResponseAsString(data);
 
-                            Message messageObj = new Message(data);
+                            Message messageObj = new Message(buffer);
 
                             server.Close();
 
@@ -418,6 +493,23 @@ namespace ProxyApp
         private bool InCache(string ETag)
         {
             return CachedMessages.ContainsKey(ETag);
+        }
+
+        private bool CheckAuthentication(string response)
+        {
+            string[] headers = response.Split('\n');
+            foreach (string header in headers)
+            {
+                if (header.StartsWith("Authentication: "))
+                {
+                    string username = "admin";
+                    string password = "admin";
+                    string encoded = Convert.ToBase64String(Encoding.GetEncoding("ISO-8859-1").GetBytes(username + ":" + password));
+                    string[] auth = header.Split(new[] { ": " }, StringSplitOptions.None);
+                    if (auth[1].Equals("Basic " + encoded)) return true;
+                }
+            }
+            return false;
         }
     }
 }
