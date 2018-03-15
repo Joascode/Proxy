@@ -9,10 +9,7 @@ namespace ProxyApp
 {
     class Message
     {
-        //Store the message object returned by a request and response.
-
-        byte[] byteMessage;
-        //string[] strMessage;
+        public byte[] byteMessage;
         StringBuilder sb = new StringBuilder();
 
         private static readonly string[] _imageExtensions = { "jpg", "bmp", "gif", "png", "jpeg" };
@@ -20,46 +17,74 @@ namespace ProxyApp
         public Message(byte[] byteMessage)
         {
             this.byteMessage = byteMessage;
-            //this.strMessage = strMessage;
         }
 
         public string GetMessageAsLog()
         {
-            string body = Encoding.UTF8.GetString(byteMessage, 0, byteMessage.Length);
-
-            //sb.Append(GetHeadersAsString());
-            //sb.Append('\n');
-            //sb.Append(body);
-
-            //string fullMsg = sb.ToString();
-            //sb.Clear();
-
-            return body;
+            return Encoding.UTF8.GetString(byteMessage, 0, byteMessage.Length);
         }
 
-        /*public string GetETag()
-        {
-            return headers["ETag"];
-        }*/
-
-        public byte[] GetBody()
+        public byte[] GetMessage()
         {
             return byteMessage;
         }
 
-        /*public string GetHeadersAsString()
+        public string RemoveBrowserHeader(string request)
         {
+            string[] headers = request.Split('\n');
             foreach(string header in headers)
             {
-                sb.AppendFormat("{0}:{1} \n", header, headers[header]);
+                if(!header.StartsWith("User-Agent:"))
+                {
+                    sb.Append(header);
+                }
             }
-
-            var stringMsg = sb.ToString();
+            string newMessage = sb.ToString();
             sb.Clear();
 
-            return stringMsg;
-        }*/
+            return newMessage;
+        }
 
+        public bool RequestForImage(string request)
+        {
+            string[] headers = request.Split('\n');
+            foreach (string header in headers)
+            {
+                if (header.StartsWith("Content-Type:"))
+                {
+                    foreach(string imageType in _imageExtensions)
+                    {
+                        if(header.EndsWith(imageType+" "))
+                        {
+                            Console.WriteLine("Bingo! " + header);
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+
+        public string GetUrlFromRequest(string request)
+        {
+            string[] headers = request.Split('\n');
+            foreach(string header in headers)
+            {
+                if(header.StartsWith("Host:"))
+                {
+                    Console.WriteLine(header);
+                    string[] host = header.Split(' ');
+                    foreach (string hosti in host) Console.WriteLine(hosti);
+                    return host[1].Split('\r')[0];
+                }
+            }
+            return null;
+        }
+
+
+
+        //Deze is af.
         public string GetHeadersAsString()
         {
             string message = Encoding.ASCII.GetString(byteMessage, 0, byteMessage.Length);

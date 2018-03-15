@@ -18,6 +18,7 @@ namespace ProxyApp
         TcpListener listener;
         TcpClient client;
         NetworkStream ns;
+        NetworkStream stream;
         private StringBuilder sb = new StringBuilder();
         private static readonly string[] _imageExtensions = { "jpg", "bmp", "gif", "png", "jpeg" };
 
@@ -130,101 +131,122 @@ namespace ProxyApp
         {
             using (ns = client.GetStream())
             {
-                //Change to work with byte array. Use message object to handle string variation of returned message.
-                string request = ReadMessage();
+                Message request = ReceiveRequest(callback);
 
-                if (removeBrowser) request = RemoveBrowserHeader(request);
-                
+                TcpClient server = new TcpClient();
+                server.Connect(GetUrlFromRequest(request.GetHeadersAsString()), 80);
 
-                //Retrieve string array from message object to use the string variation of the byte array.
-                callback(request, Types.request);
+                //if (removeBrowser) request = RemoveBrowserHeader(request);
 
-                //TODO: Still need to cache responses based on DateTime.
+                ForwardRequest(server, callback, request.byteMessage);
 
-                Message response;
-                    //Url has to be returned from a method from the message object.
-                string url = GetUrlFromRequest(request);
-                Console.WriteLine(url);
-                if (url != null)
-                {
-                    response = ReachSite(url, request);
-                    if (response != null)
-                    {
-                        if (blockImages && RequestForImage(response.GetHeadersAsString()))
-                        {
-                            var newurl = "http://clipground.com/images/placeholder-clipart-6.jpg";
-                            //response = ReachSite(newurl, message);
-                        }
+                Message response = ReceiveResponse(callback);
 
-                        if (response != null)
-                        {
-                            //Retrieve string from message object to use the string variation of the byte array.
-                            if (basicAuth)
-                            {
-                                if (CheckAuthentication(request))
-                                {
-                                    callback("User authenticated.", Types.response);
-                                    callback(response.GetMessageAsLog(), Types.response);
-                                }
-                                
-                            } else
-                            {
-                                //Change Types to allow responses that always are visible.
-                                callback("User not authenticated.", Types.response);
-                                callback(response.GetMessageAsLog(), Types.response);
-                            }
-                            
+                server.Close();
 
-                            /*if(response.GetETag() != null)
-                            {
-                                
-                                if(!CachedMessages.ContainsKey(url))
-                                {
-                                    CachedMessages.Add(url, response);
-                                    Console.WriteLine("Cached site.");
-                                }
-                                   
-                            }*/
-
-                            //Change to work with byte array. Use message object to handle string variation of returned message.
-                            WriteMessage(response.GetBody());
-                        }
-                    }
-                }
+                ForwardResponse(callback, response.byteMessage);
             }
             
-            //client.Close();
+            client.Close();
         }
 
-        //Change method to work with byte array.
-        private string ReadMessage()
+        private Message ReceiveRequest(Action<string, Types> callback)
         {
-            string message = "";
-            do
+            Console.WriteLine("Receiving Request.");
+            //http://www.yoda.arachsys.com/csharp/readbinary.html
+
+            using (var mstrm = new MemoryStream())
             {
-                int messageLength = ns.Read(buffer, 0, buffer.Length);
-                sb.AppendFormat("{0}", Encoding.UTF8.GetString(buffer, 0, messageLength));
-                
-                // message.ReadMessage(buffer, messageLength);
-                
-            } while (ns.DataAvailable);
+                var tempBuffer = new byte[1024];
+                int bytesRead;
+                if (ns.CanRead)
+                {
+                    if (ns.DataAvailable)
+                    {
+                        do
+                        {
+                            bytesRead = ns.Read(tempBuffer, 0, tempBuffer.Length);
+                            mstrm.Write(tempBuffer, 0, bytesRead);
 
-            message = sb.ToString();
+                        } while (ns.DataAvailable);
+                    }
+                }
+                buffer = mstrm.GetBuffer();
+                mstrm.Flush();
+            }
 
-            sb.Clear();
+            Console.WriteLine("Data size: " + buffer.Length);
+            Console.WriteLine("Response: " + Encoding.ASCII.GetString(buffer, 0, buffer.Length));
+
+            Message messageObj = new Message(buffer);
+
             buffer = new byte[bufferSize];
 
-            return message;    
+            return messageObj;
         }
 
-        //Change method to work with byte array instead of string.
-        private void WriteMessage(byte[] message)
+        private void ForwardRequest(TcpClient server, Action<string, Types> callback, byte[] request)
         {
-            if (message != null)
+            //Dit is echt heel lelijk, ik start deze stream liever ergens anders. Komt later.
+            stream = server.GetStream();
+            if (request != null)
             {
-                //int messageSize = Encoding.UTF8.GetByteCount(message);
-                //byte[] outBuffer = Encoding.UTF8.GetBytes(message);
-                ns.Write(message, 0, message.Length);
+                Console.WriteLine("Forwarding Request.");
+                stream.Write(request, 0, request.Length);
+                stream.Flush();
+            }
+            else
+            {
+                //Change to callback function.
+                window.AddToLog("Requested site is not reachable.");
+            }
+        }
+
+        private Message ReceiveResponse(Action<string, Types> callback)
+        {
+
+            //http://www.yoda.arachsys.com/csharp/readbinary.html
+            using (var mstrm = new MemoryStream())
+            {
+                var tempBuffer = new byte[1024];
+                int bytesRead;
+                if (stream.CanRead)
+                {
+                    Thread.Sleep(1000);
+                    Console.WriteLine("Can read Response.");
+                    if (stream.DataAvailable)
+                    {
+                        Console.WriteLine("Data available Response.");
+                        do
+                        {
+                            Console.WriteLine("Buffering Response.");
+                            bytesRead = stream.Read(tempBuffer, 0, tempBuffer.Length);
+                            Console.WriteLine("Bytes read.");
+                            mstrm.Write(tempBuffer, 0, bytesRead);
+
+                        } while (stream.DataAvailable);
+                    }
+                }
+                buffer = mstrm.GetBuffer();
+                mstrm.Flush();
+            }
+
+            Console.WriteLine("Data size: " + buffer.Length);
+            Console.WriteLine("Response: " + Encoding.ASCII.GetString(buffer, 0, buffer.Length));
+
+            Message messageObj = new Message(buffer);
+
+            buffer = new byte[bufferSize];
+
+            return messageObj;
+        }
+
+        private void ForwardResponse(Action<string, Types> callback, byte[] response)
+        {
+            Console.WriteLine("Forwarding Response.");
+            if (response != null)
+            {
+                ns.Write(response, 0, response.Length);
                 ns.Flush();
             }
             else
@@ -232,220 +254,9 @@ namespace ProxyApp
                 //Change to callback function.
                 window.AddToLog("Requested site is not reachable.");
             }
-
-            //buffer = new byte[bufferSize];
         }
 
-        //Change method to work with byte array and message object.
-        private Message ReachSite(string url, string message)
-        {
-            try
-            {
-                //var uri = new Uri(url);
-                try
-                {
-                    Console.WriteLine("Request: " + message);
-                    //TODO: Rewrite to TcpClient.
-                    TcpClient server = new TcpClient();
-                    //Doesn't send header yet.
-                    server.Connect(url, 80);
-
-                    //if (CachedMessages.TryGetValue(url, out Message message))
-                    //{
-                    //   Console.WriteLine("Found ETag for url.");
-                    //    webRequest.Headers.Add("ETag:" + message.GetETag());
-                    //}
-
-                    try
-                    {
-                        //TODO: Luister naar networkstream van de nieuwe TcpClient voor de response.
-                        using (Stream response = server.GetStream())
-                        {
-                            byte[] request = Encoding.ASCII.GetBytes(message);
-                            response.Write(request, 0, request.Length);
-
-
-                            /*Console.WriteLine((int)response.StatusCode);
-                            if (response.StatusCode.Equals("UNMODIFIED"))
-                            {
-                                Console.WriteLine("Return cached.");
-                                return message;
-                            }*/
-
-                            /*byte[] data;
-
-
-                            using (var mstrm = new MemoryStream())
-                            {
-                                var tempBuffer = new byte[1024];
-                                int bytesRead;
-                                if (response.CanRead)
-                                {
-                                    if (response.DataAvailable)
-                                    {
-                                        do
-                                        {
-                                            bytesRead = response.Read(tempBuffer, 0, tempBuffer.Length);
-                                            mstrm.Write(tempBuffer, 0, bytesRead);
-
-                                        } while (response.DataAvailable);
-                                        while ((bytesRead = response.Read(tempBuffer, 0, tempBuffer.Length)) > 0)
-                                        {
-                                            mstrm.Write(tempBuffer, 0, bytesRead);
-                                        }
-                                    }
-                                }*/
-
-                            //http://www.yoda.arachsys.com/csharp/readbinary.html
-                            byte[] buffer = new byte[1024];
-                            int read = 0;
-
-                            int chunk;
-                            while ((chunk = response.Read(buffer, read, buffer.Length - read)) > 0)
-                            {
-                                read += chunk;
-                                Console.WriteLine("Buffering.");
-                                // If we've reached the end of our buffer, check to see if there's
-                                // any more information
-                                if (read == buffer.Length)
-                                {
-                                    Console.WriteLine("End of buffer.");
-                                    int nextByte = response.ReadByte();
-
-                                    // End of stream? If so, we're done
-                                    if (nextByte == -1)
-                                    {
-                                        Console.WriteLine("Done reading stream.");
-                                        break;
-                                    }
-
-                                    // Nope. Resize the buffer, put in the byte we've just
-                                    // read, and continue
-                                    byte[] newBuffer = new byte[buffer.Length * 2];
-                                    Array.Copy(buffer, newBuffer, buffer.Length);
-                                    newBuffer[read] = (byte)nextByte;
-                                    buffer = newBuffer;
-                                    read++;
-                                }
-                            }
-
-                            /*byte[] buffer = new byte[32768];
-                            byte[] byteMessage;
-                            using (MemoryStream ms = new MemoryStream())
-                            {
-                                while (true)
-                                {
-                                    int read = response.Read(buffer, 0, buffer.Length);
-                                    if (read <= 0)
-                                    {
-                                        byteMessage = ms.ToArray();
-                                        break;
-                                    }
-                                    ms.Write(buffer, 0, read);
-                                }
-                            }*/
-
-                            //data = mstrm.GetBuffer();
-                            Console.WriteLine("Data size: " + buffer.Length);
-                            Console.WriteLine("Response: " + Encoding.ASCII.GetString(buffer, 0 , buffer.Length));
-                            //mstrm.Flush();
-                            //}
-
-                            //Convert response to headers string.
-                            //Create function to parse data to retrieve headers and data.
-                            //string[] responseMsg = GetResponseAsString(data);
-
-                            Message messageObj = new Message(buffer);
-
-                            server.Close();
-
-                            return messageObj;
-                        }
-                    }
-                    catch (Exception e) when (
-                      e is WebException ||
-                      e is InvalidOperationException ||
-                      e is NotSupportedException ||
-                      e is ProtocolViolationException
-                    )
-                    {
-                        string errorMsg = "An error has occured. \n" +
-                                "Error: " + e.Message + "\n" +
-                                "Url: " + url + "\n";
-
-                        callback2(errorMsg, Types.response);
-                        
-                        Console.WriteLine("An error has occured: " + e.Message);
-                        return null;
-                    }
-                } catch(Exception e) when (
-                    e is NotSupportedException ||
-                    e is ArgumentNullException ||
-                    e is SecurityException
-                )
-                {
-                    Console.WriteLine("An error has occured: " + e.Message);
-                    return null;
-                }
-            } catch(Exception e) when (
-                e is ArgumentNullException ||
-                e is UriFormatException
-            ) {
-                Console.WriteLine("An error has occured: " + e.Message);
-                return null;
-            }
-        }
-
-        private string GetUrlFromRequest(string request)
-        {
-            string[] headers = request.Split('\n');
-            foreach(string header in headers)
-            {
-                if(header.StartsWith("Host:"))
-                {
-                    Console.WriteLine(header);
-                    string[] host = header.Split(' ');
-                    foreach (string hosti in host) Console.WriteLine(hosti);
-                    return host[1].Split('\r')[0];
-                }
-            }
-            return null;
-            /*if (headers.Length > 1)
-            {
-                Console.WriteLine(headers[1]);
-                string[] url;
-                if(headers[1].StartsWith("https://"))
-                {
-                    url = headers[1].Split(new[] { "https://" }, StringSplitOptions.None);
-                }else //if(headers[1].StartsWith("http://"))
-                    url = headers[1].Split(new[] { "http://" }, StringSplitOptions.None);
-                Console.WriteLine(url[0]);
-                return url[0];
-            }*/
-            //else return null;
-        }
-
-        private bool RequestForImage(string request)
-        {
-            string[] headers = request.Split('\n');
-            foreach (string header in headers)
-            {
-                if (header.StartsWith("Content-Type:"))
-                {
-                    foreach(string imageType in _imageExtensions)
-                    {
-                        if(header.EndsWith(imageType+" "))
-                        {
-                            Console.WriteLine("Bingo! " + header);
-                            return true;
-                        }
-                    }
-                }
-            }
-
-            return false;
-        }
-
+        //Place into request object.
         private string RemoveBrowserHeader(string request)
         {
             string[] headers = request.Split('\n');
@@ -469,30 +280,6 @@ namespace ProxyApp
             headers[1] = newUrl;
 
             return newUrl;
-        }
-
-        private string GrabETag(string request)
-        {
-            string[] headers = request.Split('\n');
-            foreach (string header in headers)
-            {
-                Console.WriteLine(header);
-                if (header.StartsWith("ETag:"))
-                {
-                    var newheader = header.Split(':');
-                    Console.WriteLine(newheader);
-                    sb.Append(newheader[1]);
-                }
-            }
-            string ETag = sb.ToString();
-            sb.Clear();
-
-            return ETag;
-        }
-
-        private bool InCache(string ETag)
-        {
-            return CachedMessages.ContainsKey(ETag);
         }
 
         private bool CheckAuthentication(string response)
