@@ -9,8 +9,10 @@ namespace ProxyApp
 {
     class Message
     {
-        public byte[] byteMessage;
-        StringBuilder sb = new StringBuilder();
+        private  byte[] byteMessage;
+        private bool messageAdjusted = false;
+        private StringBuilder sb = new StringBuilder();
+        private string stringMessage;
 
         private static readonly string[] _imageExtensions = { "jpg", "bmp", "gif", "png", "jpeg" };
 
@@ -29,12 +31,13 @@ namespace ProxyApp
             return byteMessage;
         }
 
-        public string RemoveBrowserHeader(string request)
+        public void RemoveBrowserHeader(string headerName)
         {
-            string[] headers = request.Split('\n');
+            string headersString = GetHeadersAsString();
+            string[] headers = headersString.Split('\n');
             foreach(string header in headers)
             {
-                if(!header.StartsWith("User-Agent:"))
+                if(!header.StartsWith($"{headerName}:"))
                 {
                     sb.Append(header);
                 }
@@ -42,12 +45,15 @@ namespace ProxyApp
             string newMessage = sb.ToString();
             sb.Clear();
 
-            return newMessage;
+            messageAdjusted = true;
+
+            stringMessage = newMessage;
         }
 
-        public bool RequestForImage(string request)
+        public bool RequestForImage()
         {
-            string[] headers = request.Split('\n');
+            string headersString = GetHeadersAsString();
+            string[] headers = headersString.Split('\n');
             foreach (string header in headers)
             {
                 if (header.StartsWith("Content-Type:"))
@@ -56,7 +62,6 @@ namespace ProxyApp
                     {
                         if(header.EndsWith(imageType+" "))
                         {
-                            Console.WriteLine("Bingo! " + header);
                             return true;
                         }
                     }
@@ -65,10 +70,11 @@ namespace ProxyApp
             return false;
         }
 
-
-        public string GetUrlFromRequest(string request)
+        //Deze is af.
+        public string GetHostFromRequest()
         {
-            string[] headers = request.Split('\n');
+            string stringHeader = GetHeadersAsString();
+            string[] headers = stringHeader.Split('\n');
             foreach(string header in headers)
             {
                 if(header.StartsWith("Host:"))
@@ -82,20 +88,20 @@ namespace ProxyApp
             return null;
         }
 
-
-
         //Deze is af.
         public string GetHeadersAsString()
         {
-            string message = Encoding.ASCII.GetString(byteMessage, 0, byteMessage.Length);
-
-            string[] splitMessage = message.Split(new[] { "\r\n\r\n", "\n\n" }, StringSplitOptions.None);
-
-            return splitMessage[0];
+            return GetMessageAsStringArray()[0];
         }
 
-        private string AddBasicAuth(string headers)
+        public string GetBodyAsString()
         {
+            return GetMessageAsStringArray()[1];
+        }
+
+        public void AddBasicAuth()
+        {
+            string headers = GetHeadersAsString();
             string username = "admin";
             string password = "admin";
             string encoded = Convert.ToBase64String(Encoding.GetEncoding("ISO-8859-1").GetBytes(username + ":" + password));
@@ -107,9 +113,33 @@ namespace ProxyApp
             sb.Append("\n");
 
             string newHeaders = sb.ToString();
+            Console.WriteLine(newHeaders);
             sb.Clear();
 
-            return newHeaders;
+            messageAdjusted = true;
+
+            stringMessage = newHeaders;
+        }
+
+        public byte[] GetMessageAsByteArray()
+        {
+            if(messageAdjusted)
+            {
+                string message = stringMessage + GetBodyAsString();
+                return Encoding.ASCII.GetBytes(message);
+            } else
+            {
+                return byteMessage;
+            }
+        }
+
+        private string[] GetMessageAsStringArray()
+        {
+            string message = Encoding.ASCII.GetString(byteMessage, 0, byteMessage.Length);
+
+            string[] splitMessage = message.Split(new[] { "\r\n\r\n", "\n\n" }, StringSplitOptions.None);
+
+            return splitMessage;
         }
     }
 }

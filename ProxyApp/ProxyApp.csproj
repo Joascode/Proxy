@@ -54,8 +54,11 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="LogMessage.cs" />
     <Compile Include="Message.cs" />
+    <Compile Include="Request.cs" />
     <Compile Include="RequestHandler.cs" />
+    <Compile Include="Response.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>

@@ -70,6 +70,11 @@ namespace ProxyApp
                                 break;
                             }
                         }
+                        case RequestHandler.Types.log:
+                        {
+                            AddToLog(message);
+                            break;
+                        }
                     }
                 });
                 AddToLog("Listening for requests.");
