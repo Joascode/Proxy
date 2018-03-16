@@ -37,8 +37,9 @@ namespace ProxyApp
             string[] headers = headersString.Split('\n');
             foreach(string header in headers)
             {
-                if(!header.StartsWith($"{headerName}:"))
+                if (!header.StartsWith($"{headerName}:"))
                 {
+                    //Console.WriteLine("Adding header: " + header);
                     sb.Append(header);
                 }
             }
@@ -58,10 +59,11 @@ namespace ProxyApp
             {
                 if (header.StartsWith("Content-Type:"))
                 {
-                    foreach(string imageType in _imageExtensions)
+                    foreach (string imageType in _imageExtensions)
                     {
-                        if(header.EndsWith(imageType+" "))
+                        if (header.EndsWith(imageType+"\r"))
                         {
+                            Console.WriteLine("Image found!");
                             return true;
                         }
                     }
@@ -79,9 +81,8 @@ namespace ProxyApp
             {
                 if(header.StartsWith("Host:"))
                 {
-                    Console.WriteLine(header);
                     string[] host = header.Split(' ');
-                    foreach (string hosti in host) Console.WriteLine(hosti);
+                    //foreach (string hosti in host) Console.WriteLine(hosti);
                     return host[1].Split('\r')[0];
                 }
             }
@@ -91,12 +92,21 @@ namespace ProxyApp
         //Deze is af.
         public string GetHeadersAsString()
         {
-            return GetMessageAsStringArray()[0];
+            if(stringMessage == null)
+            {
+                return GetMessageAsStringArray()[0];
+            }
+            return stringMessage;
+            
         }
 
         public string GetBodyAsString()
         {
-            return GetMessageAsStringArray()[1];
+            if(GetMessageAsStringArray()[1] != null)
+            {
+                return GetMessageAsStringArray()[1];
+            }
+            return null;
         }
 
         public void AddBasicAuth()
@@ -113,7 +123,7 @@ namespace ProxyApp
             sb.Append("\n");
 
             string newHeaders = sb.ToString();
-            Console.WriteLine(newHeaders);
+            //Console.WriteLine(newHeaders);
             sb.Clear();
 
             messageAdjusted = true;
@@ -123,20 +133,23 @@ namespace ProxyApp
 
         public byte[] GetMessageAsByteArray()
         {
-            if(messageAdjusted)
+            /*if(messageAdjusted)
             {
-                string message = stringMessage + GetBodyAsString();
+                Console.WriteLine(stringMessage);
+                string message = stringMessage + "\n" + GetBodyAsString();
+                messageAdjusted = false;
                 return Encoding.ASCII.GetBytes(message);
             } else
-            {
+            {*/
                 return byteMessage;
-            }
+            //}
         }
 
         private string[] GetMessageAsStringArray()
         {
+            //string message = Convert.ToBase64String(byteMessage, Base64FormattingOptions.InsertLineBreaks);
             string message = Encoding.ASCII.GetString(byteMessage, 0, byteMessage.Length);
-
+            //Console.WriteLine(message);
             string[] splitMessage = message.Split(new[] { "\r\n\r\n", "\n\n" }, StringSplitOptions.None);
 
             return splitMessage;

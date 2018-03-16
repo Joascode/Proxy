@@ -17,8 +17,8 @@ namespace ProxyApp
         MainWindow window;
         TcpListener listener;
         TcpClient client;
-        NetworkStream ns;
-        NetworkStream stream;
+        NetworkStream clientStream;
+        NetworkStream serverStream;
         private StringBuilder sb = new StringBuilder();
         private static readonly string[] _imageExtensions = { "jpg", "bmp", "gif", "png", "jpeg" };
 
@@ -86,7 +86,7 @@ namespace ProxyApp
             }
         }
 
-        private bool basicAuth = false;
+        public bool basicAuth = false;
 
         public RequestHandler(MainWindow window, int port, int bufferSize)
         {
@@ -130,39 +130,48 @@ namespace ProxyApp
         //REVAMP TO SUPPORTS 4-way MESSAGES. Client > Proxy > Server > Proxy > Client.
         private void HandleMessages(Action<string, Types> callback)
         {
-            using (ns = client.GetStream())
+            using (clientStream = client.GetStream())
             {
                 Message request = ReceiveRequest(callback);
 
                 TcpClient server = new TcpClient();
+                //server.SendTimeout = 1000;
+                //server.ReceiveTimeout = 5000;
 
                 try
                 {
                     server.Connect(request.GetHostFromRequest(), 80);
 
-                    //if (removeBrowser) request.RemoveBrowserHeader("User-Agent");
+                    if (removeBrowser) request.RemoveBrowserHeader("User-Agent");
 
-                    ForwardRequest(server, callback, request.GetMessageAsByteArray());
+                    ForwardRequest(server, callback, request);
 
                     Message response = ReceiveResponse(callback);
 
-                    /*if (replaceImages) {
+                    if (blockImages) {
                         if(response.RequestForImage())
                         {
-                            response = RequestPlaceholder(PLACEHOLDER_URL);
+                            //response = RequestPlaceholder(PLACEHOLDER_URL);
+                            Console.WriteLine("Asking for image.");
                         }
-                    }*/
+                    }
 
-                    /*if(basicAuth)
+                    if(basicAuth)
                     {
                         response.AddBasicAuth();
+                        //Console.WriteLine(response.GetHeadersAsString());
                         if(CheckAuthentication(response.GetHeadersAsString()))
                         {
-                            ForwardResponse(callback, response.byteMessage);
+                            Console.WriteLine("Authorized.");
+                            ForwardResponse(callback, response);
                         }
-                    }*/
+                        else
+                        {
+                            Console.WriteLine("Unauthorized.");
+                        }
+                    }
 
-                    ForwardResponse(callback, response.GetMessageAsByteArray());
+                    //ForwardResponse(callback, response);
                 }
                 catch(Exception e) when (
                     e is ArgumentNullException ||
@@ -172,6 +181,7 @@ namespace ProxyApp
                 )
                 {
                     callback($"An Error has occurred: {e.Message}", Types.log);
+                    Console.WriteLine("Error: " + e.Message);
                 } finally
                 {
                     server.Close();
@@ -188,24 +198,24 @@ namespace ProxyApp
             {
                 var tempBuffer = new byte[1024];
                 int bytesRead;
-                if (ns.CanRead)
+                if (clientStream.CanRead)
                 {
-                    if (ns.DataAvailable)
+                    if (clientStream.DataAvailable)
                     {
                         do
                         {
-                            bytesRead = ns.Read(tempBuffer, 0, tempBuffer.Length);
+                            bytesRead = clientStream.Read(tempBuffer, 0, tempBuffer.Length);
                             mstrm.Write(tempBuffer, 0, bytesRead);
 
-                        } while (ns.DataAvailable);
+                        } while (clientStream.DataAvailable);
                     }
                 }
                 buffer = mstrm.GetBuffer();
                 mstrm.Flush();
             }
 
-            Console.WriteLine("Data size: " + buffer.Length);
-            Console.WriteLine("Response: " + Encoding.ASCII.GetString(buffer, 0, buffer.Length));
+            //Console.WriteLine("Data size: " + buffer.Length);
+            callback("Received Request: \n" + Encoding.ASCII.GetString(buffer, 0, buffer.Length), Types.request);
 
             Message messageObj = new Message(buffer);
 
@@ -214,15 +224,18 @@ namespace ProxyApp
             return messageObj;
         }
 
-        private void ForwardRequest(TcpClient server, Action<string, Types> callback, byte[] request)
+        private void ForwardRequest(TcpClient server, Action<string, Types> callback, Message request)
         {
             //Dit is echt heel lelijk, ik start deze stream liever ergens anders. Komt later.
-            stream = server.GetStream();
+            serverStream = server.GetStream();
             if (request != null)
             {
-                callback("Forwarding request.", Types.log);
-                stream.Write(request, 0, request.Length);
-                stream.Flush();
+                byte[] message = request.GetMessageAsByteArray();
+                //Console.WriteLine(message.Length);
+                //Console.WriteLine(request.GetHeadersAsString());
+                callback("Forwarding request:\n" + request.GetHeadersAsString(), Types.log);
+                serverStream.Write(message, 0, message.Length);
+                serverStream.Flush();
             }
             else
             {
@@ -233,22 +246,22 @@ namespace ProxyApp
 
         private Message ReceiveResponse(Action<string, Types> callback)
         {
-
             //http://www.yoda.arachsys.com/csharp/readbinary.html
             using (var mstrm = new MemoryStream())
             {
                 var tempBuffer = new byte[1024];
                 int bytesRead;
-                if (stream.CanRead)
+                if (serverStream.CanRead)
                 {
-                    Thread.Sleep(1000);
-                    if (stream.DataAvailable)
+                    Thread.Sleep(500);
+                    
+                    if (serverStream.DataAvailable)
                     {
                         do
                         {
-                            bytesRead = stream.Read(tempBuffer, 0, tempBuffer.Length);
+                            bytesRead = serverStream.Read(tempBuffer, 0, tempBuffer.Length);
                             mstrm.Write(tempBuffer, 0, bytesRead);
-                        } while (stream.DataAvailable);
+                        } while (serverStream.DataAvailable);
                     }
                 }
 
@@ -256,8 +269,8 @@ namespace ProxyApp
                 mstrm.Flush();
             }
 
-            Console.WriteLine("Data size: " + buffer.Length);
-            Console.WriteLine("Response: " + Encoding.ASCII.GetString(buffer, 0, buffer.Length));
+            //Console.WriteLine("Data size: " + buffer.Length);
+            callback("Response received: \n" + Encoding.ASCII.GetString(buffer, 0, buffer.Length), Types.response);
 
             Message messageObj = new Message(buffer);
 
@@ -266,14 +279,15 @@ namespace ProxyApp
             return messageObj;
         }
 
-        private void ForwardResponse(Action<string, Types> callback, byte[] response)
+        private void ForwardResponse(Action<string, Types> callback, Message response)
         {
             
             if (response != null)
             {
-                callback("Forwarding Response.", Types.log);
-                ns.Write(response, 0, response.Length);
-                ns.Flush();
+                byte[] message = response.GetMessageAsByteArray();
+                callback("Forwarding response:\n" + response.GetMessageAsLog(), Types.log);
+                clientStream.Write(message, 0, message.Length);
+                clientStream.Flush();
             }
             else
             {
@@ -302,7 +316,7 @@ namespace ProxyApp
         private string ChangeImageRequest(string request)
         {
             string[] headers = request.Split(' ');
-            string newUrl = "http://clipground.com/images/placeholder-clipart-6.jpg";
+            string newUrl = "www.clipground.com/images/placeholder-clipart-6.jpg";
             headers[1] = newUrl;
 
             return newUrl;
@@ -313,13 +327,18 @@ namespace ProxyApp
             string[] headers = response.Split('\n');
             foreach (string header in headers)
             {
-                if (header.StartsWith("Authentication: "))
+                if (header.StartsWith("Proxy-Authorization: "))
                 {
                     string username = "admin";
                     string password = "admin";
                     string encoded = Convert.ToBase64String(Encoding.GetEncoding("ISO-8859-1").GetBytes(username + ":" + password));
                     string[] auth = header.Split(new[] { ": " }, StringSplitOptions.None);
-                    if (auth[1].Equals("Basic " + encoded)) return true;
+                    foreach (string authRow in auth)
+                    {
+                        if (authRow.StartsWith("Basic "))
+                            if(authRow.Equals("Basic " + encoded + "\r")) return true;
+                    }
+                    
                 }
             }
             return false;
