@@ -175,6 +175,22 @@ namespace ProxyApp
             }
         }
 
+        private void BasicAuthCheck_Click(object sender, RoutedEventArgs e)
+        {
+            if(requestHandler == null)
+            {
+                AddToLog("Please start the proxy first.");
+                BasicAuthCheckBox.IsChecked = false;
+            }
+            else
+            {
+                requestHandler.basicAuth = (bool)BasicAuthCheckBox.IsChecked;
+
+                if ((bool)BasicAuthCheckBox.IsChecked) AddToLog("Checking for Authentication");
+                else AddToLog("Blocking unauthicated user.");
+            }
+        }
+
         public void AddToLog(string request)
         {
             if(!Dispatcher.CheckAccess())

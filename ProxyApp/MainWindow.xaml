@@ -16,7 +16,7 @@
         <CheckBox Content="" HorizontalAlignment="Left" Margin="557,122,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
         <CheckBox Name="ContentFilterCheckBox" Click="ContentFilterCheck_Click" Content="" HorizontalAlignment="Left" Margin="557,149,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
         <CheckBox Name="HeaderEditCheckBox" Click="HeaderEditCheck_Click" Content="" HorizontalAlignment="Left" Margin="557,179,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
-        <CheckBox Content="" HorizontalAlignment="Left" Margin="557,206,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
+        <CheckBox Name="BasicAuthCheckBox" Click="BasicAuthCheck_Click" Content="" HorizontalAlignment="Left" Margin="557,206,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
         <TextBox Name="BufferSizeTxt" KeyDown="BufferSizeChangedHandler" HorizontalAlignment="Left" Height="23" Margin="444,239,0,0" TextWrapping="Wrap" Text="1024" VerticalAlignment="Top" Width="129" />
         <CheckBox Content="" HorizontalAlignment="Left" Margin="557,277,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
         <CheckBox Content="" HorizontalAlignment="Left" Margin="557,302,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
