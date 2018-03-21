@@ -22,13 +22,29 @@ namespace ProxyApp
         private StringBuilder sb = new StringBuilder();
 
         private Dictionary<string, Message> CachedMessages = new Dictionary<string, Message>();
-        
+
+        private static readonly object _lock = new object();
+
         //private Action<string, Types> callback2;
         public enum Types
         {
             request,
             response,
             log
+        }
+
+        //MOET NOG GEKOPPELD WORDEN AAN UI.
+        private long cacheDuration = 30000;
+        public long CacheDuration
+        {
+            get
+            {
+                return cacheDuration;
+            }
+            set
+            {
+                cacheDuration = value;
+            }
         }
 
         private bool blockImages;
@@ -110,7 +126,8 @@ namespace ProxyApp
                     {
                         await Task.Run(() => HandleMessages(callback));
                     }
-                    
+                    lock (CachedMessages) CheckForClearCache();
+
                 } catch(InvalidOperationException)
                 {
                     //Geen nette manier van sluiten, maar nu geen tijd voor.
@@ -138,73 +155,105 @@ namespace ProxyApp
 
                 //Check if request has been made earlier. If so, retrieve response tied to request.
                 //TODO: Check for null return value from GetRequestUrl.
-                if(CachedMessages.TryGetValue(request.GetRequestUrl(), out response))
+                Console.WriteLine(request);
+                if(request.GetRequestUrl() != null)
                 {
-                    ForwardResponse(callback, response);
-                }
-                //Start a connection and grab response from server.
-                else
-                {
-                    TcpClient server = new TcpClient();
-
-                    try
+                    if (CachedMessages.TryGetValue(request.GetRequestUrl(), out response) && response
+                    != null)
                     {
-                        server.Connect(request.GetHostFromRequest(), 80);
+                        Console.WriteLine("Returning response from cache.");
+                        Console.WriteLine(request.GetRequestUrl());
+                        ForwardResponse(callback, response);
+                    }
+                    //Start a connection and grab response from server.
+                    else
+                    {
+                        TcpClient server = new TcpClient();
 
-                        if (removeBrowser) request.RemoveBrowserHeader("User-Agent");
-
-                        ForwardRequest(server, callback, request);
-
-                        response = ReceiveResponse(callback);
-
-                        if (blockImages)
+                        try
                         {
-                            if (response.RequestForImage())
+                            server.Connect(request.GetHostFromRequest(), 80);
+
+                            if (removeBrowser) request.RemoveBrowserHeader("User-Agent");
+
+                            ForwardRequest(server, callback, request);
+
+                            response = ReceiveResponse(callback);
+
+
+                            //TEST THIS METHOD!
+                            if (blockImages)
                             {
-                                //response = RequestPlaceholder(PLACEHOLDER_URL);
-                                Console.WriteLine("Asking for image.");
+                                if (response.RequestForImage())
+                                {
+                                    //response = RequestPlaceholder(PLACEHOLDER_URL);
+                                    Console.WriteLine("Asking for image.");
+                                    response.ByteMessage = GetImageAsByteArray();
+
+                                }
                             }
+
+                            if (basicAuth)
+                            {
+                                response.AddBasicAuth();
+                                //Console.WriteLine(response.GetHeadersAsString());
+                                if (CheckAuthentication(response.GetHeadersAsString()))
+                                {
+                                    Console.WriteLine("Authorized.");
+                                    ForwardResponse(callback, response);
+                                }
+                                else
+                                {
+                                    Console.WriteLine("Unauthorized.");
+                                }
+                            }
+
+                            lock (CachedMessages) CachedMessages.Add(request.GetRequestUrl(), response);
+
+                            //ForwardResponse(callback, response);
+                        }
+                        catch (Exception e) when (
+                            e is ArgumentNullException ||
+                            e is ArgumentOutOfRangeException ||
+                            e is SocketException ||
+                            e is ObjectDisposedException
+                        )
+                        {
+                            callback($"An Error has occurred: {e.Message}", Types.log);
+                            Console.WriteLine("Error: " + e.Message);
+                        }
+                        finally
+                        {
+                            server.Close();
                         }
 
-                        if (basicAuth)
-                        {
-                            response.AddBasicAuth();
-                            //Console.WriteLine(response.GetHeadersAsString());
-                            if (CheckAuthentication(response.GetHeadersAsString()))
-                            {
-                                Console.WriteLine("Authorized.");
-                                ForwardResponse(callback, response);
-                            }
-                            else
-                            {
-                                Console.WriteLine("Unauthorized.");
-                            }
-                        }
-
-                        CachedMessages.Add(request.GetRequestUrl(), response);
-
-                        //ForwardResponse(callback, response);
                     }
-                    catch (Exception e) when (
-                        e is ArgumentNullException ||
-                        e is ArgumentOutOfRangeException ||
-                        e is SocketException ||
-                        e is ObjectDisposedException
-                    )
-                    {
-                        callback($"An Error has occurred: {e.Message}", Types.log);
-                        Console.WriteLine("Error: " + e.Message);
-                    }
-                    finally
-                    {
-                        server.Close();
-                    }
-
-                }
+                }                
                 
             }
             
             client.Close();
+        }
+
+        private byte[] GetImageAsByteArray()
+        {
+            byte[] imgBuffer;
+            Stream imgStream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("ProxyApp.images.placeholder.png");
+            using (var mstrm = new MemoryStream())
+            {
+                var tempBuffer = new byte[1024];
+                int bytesRead;
+                do
+                {
+                    bytesRead = imgStream.Read(tempBuffer, 0, tempBuffer.Length);
+                    mstrm.Write(tempBuffer, 0, bytesRead);
+
+                } while (clientStream.DataAvailable);
+                imgBuffer = mstrm.GetBuffer();
+                mstrm.Flush();
+            }
+
+            return imgBuffer;
         }
 
         private Message ReceiveRequest(Action<string, Types> callback)
@@ -358,6 +407,32 @@ namespace ProxyApp
                 }
             }
             return false;
+        }
+
+        private void CheckForClearCache()
+        {
+            List<string> toBeRemovedItems = new List<string>();
+            foreach(var Item in CachedMessages)
+            {
+                //Console.WriteLine("" + (Item.Value.Date + cacheDuration));
+                //Console.WriteLine("" + DateTimeOffset.Now.ToUnixTimeMilliseconds());
+                if(Item.Value.Date + cacheDuration < DateTimeOffset.Now.ToUnixTimeMilliseconds())
+                {
+                    toBeRemovedItems.Add(Item.Key);
+                    //CachedMessages.Remove(Item.Key);
+                    Console.WriteLine("Response removed from cache." + Item.Key);
+                }
+            }
+
+            RemoveItemsFromCache(toBeRemovedItems);
+        }
+
+        private void RemoveItemsFromCache(List<string> items)
+        {
+            foreach(string item in items)
+            {
+                CachedMessages.Remove(item);
+            }
         }
     }
 }

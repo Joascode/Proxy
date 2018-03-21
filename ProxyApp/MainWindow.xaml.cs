@@ -141,13 +141,13 @@ namespace ProxyApp
 
         private void ContentInCheck_Click(object sender, RoutedEventArgs e)
         {
-            filterRequest = (bool) ContentInCheckBox.IsChecked;
+            filterRequestBody = (bool) ContentInCheckBox.IsChecked;
             AddToLog("Filtering out the Requests.");
         }
 
         private void ContentUitCheck_Click(object sender, RoutedEventArgs e)
         {
-            filterResponse = (bool)ContentUitCheckBox.IsChecked;
+            filterResponseBody = (bool)ContentUitCheckBox.IsChecked;
             AddToLog("Filtering out the Responses.");
         }
 

@@ -9,10 +9,29 @@ namespace ProxyApp
 {
     class Message
     {
-        private  byte[] byteMessage;
+        private byte[] byteMessage;
+        public byte[] ByteMessage
+        {
+            get
+            {
+                return byteMessage;
+            }
+            set
+            {
+                byteMessage = value;
+            }
+        }
         private bool messageAdjusted = false;
         private StringBuilder sb = new StringBuilder();
         private string stringMessage;
+        private long date = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+        public long Date
+        {
+            get
+            {
+                return date;
+            }
+        }
 
         private static readonly string[] _imageExtensions = { "jpg", "bmp", "gif", "png", "jpeg" };
 
@@ -97,7 +116,6 @@ namespace ProxyApp
             {
                 if (header.StartsWith("https:") || header.StartsWith("http:"))
                 {
-                    Console.WriteLine("Url found: " + header);
                     return header;
                 }
             }
