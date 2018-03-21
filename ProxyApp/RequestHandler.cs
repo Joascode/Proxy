@@ -20,11 +20,10 @@ namespace ProxyApp
         NetworkStream clientStream;
         NetworkStream serverStream;
         private StringBuilder sb = new StringBuilder();
-        private static readonly string[] _imageExtensions = { "jpg", "bmp", "gif", "png", "jpeg" };
 
         private Dictionary<string, Message> CachedMessages = new Dictionary<string, Message>();
         
-        private Action<string, Types> callback2;
+        //private Action<string, Types> callback2;
         public enum Types
         {
             request,
@@ -96,7 +95,7 @@ namespace ProxyApp
             buffer = new byte[bufferSize];
         }
 
-        //TODO: FIX CALLBACK MESSAGE TO RETURN A MESSAGE OBJECT.
+        //TODO: Fix callback to work without the Types enum. Isn't a clean way to create loosely coupled classes.
         public async void Listen(Action<string, Types> callback)
         {
             listener = new TcpListener(IPAddress.Any, port);
@@ -121,6 +120,7 @@ namespace ProxyApp
             }
         }
 
+        //TODO: Too small, seems useless. See if this fits into a try/catch/finally block or using.
         public void Close()
         {
             listener.Stop();
@@ -128,64 +128,80 @@ namespace ProxyApp
 
 
         //REVAMP TO SUPPORTS 4-way MESSAGES. Client > Proxy > Server > Proxy > Client.
+        //TODO: Clean up this method, because it does too many things now. SOLID isn't implemented.
         private void HandleMessages(Action<string, Types> callback)
         {
             using (clientStream = client.GetStream())
             {
                 Message request = ReceiveRequest(callback);
+                Message response = null;
 
-                TcpClient server = new TcpClient();
-                //server.SendTimeout = 1000;
-                //server.ReceiveTimeout = 5000;
-
-                try
+                //Check if request has been made earlier. If so, retrieve response tied to request.
+                //TODO: Check for null return value from GetRequestUrl.
+                if(CachedMessages.TryGetValue(request.GetRequestUrl(), out response))
                 {
-                    server.Connect(request.GetHostFromRequest(), 80);
+                    ForwardResponse(callback, response);
+                }
+                //Start a connection and grab response from server.
+                else
+                {
+                    TcpClient server = new TcpClient();
 
-                    if (removeBrowser) request.RemoveBrowserHeader("User-Agent");
-
-                    ForwardRequest(server, callback, request);
-
-                    Message response = ReceiveResponse(callback);
-
-                    if (blockImages) {
-                        if(response.RequestForImage())
-                        {
-                            //response = RequestPlaceholder(PLACEHOLDER_URL);
-                            Console.WriteLine("Asking for image.");
-                        }
-                    }
-
-                    if(basicAuth)
+                    try
                     {
-                        response.AddBasicAuth();
-                        //Console.WriteLine(response.GetHeadersAsString());
-                        if(CheckAuthentication(response.GetHeadersAsString()))
+                        server.Connect(request.GetHostFromRequest(), 80);
+
+                        if (removeBrowser) request.RemoveBrowserHeader("User-Agent");
+
+                        ForwardRequest(server, callback, request);
+
+                        response = ReceiveResponse(callback);
+
+                        if (blockImages)
                         {
-                            Console.WriteLine("Authorized.");
-                            ForwardResponse(callback, response);
+                            if (response.RequestForImage())
+                            {
+                                //response = RequestPlaceholder(PLACEHOLDER_URL);
+                                Console.WriteLine("Asking for image.");
+                            }
                         }
-                        else
+
+                        if (basicAuth)
                         {
-                            Console.WriteLine("Unauthorized.");
+                            response.AddBasicAuth();
+                            //Console.WriteLine(response.GetHeadersAsString());
+                            if (CheckAuthentication(response.GetHeadersAsString()))
+                            {
+                                Console.WriteLine("Authorized.");
+                                ForwardResponse(callback, response);
+                            }
+                            else
+                            {
+                                Console.WriteLine("Unauthorized.");
+                            }
                         }
+
+                        CachedMessages.Add(request.GetRequestUrl(), response);
+
+                        //ForwardResponse(callback, response);
+                    }
+                    catch (Exception e) when (
+                        e is ArgumentNullException ||
+                        e is ArgumentOutOfRangeException ||
+                        e is SocketException ||
+                        e is ObjectDisposedException
+                    )
+                    {
+                        callback($"An Error has occurred: {e.Message}", Types.log);
+                        Console.WriteLine("Error: " + e.Message);
+                    }
+                    finally
+                    {
+                        server.Close();
                     }
 
-                    //ForwardResponse(callback, response);
                 }
-                catch(Exception e) when (
-                    e is ArgumentNullException ||
-                    e is ArgumentOutOfRangeException ||
-                    e is SocketException ||
-                    e is ObjectDisposedException
-                )
-                {
-                    callback($"An Error has occurred: {e.Message}", Types.log);
-                    Console.WriteLine("Error: " + e.Message);
-                } finally
-                {
-                    server.Close();
-                }
+                
             }
             
             client.Close();
@@ -193,7 +209,7 @@ namespace ProxyApp
 
         private Message ReceiveRequest(Action<string, Types> callback)
         {
-            //http://www.yoda.arachsys.com/csharp/readbinary.html
+            //http://www.yoda.arachsys.com/csharp/readbinary.html <-- place where I caught my example codes to handle stream reads properly.
             using (var mstrm = new MemoryStream())
             {
                 var tempBuffer = new byte[1024];
@@ -213,8 +229,7 @@ namespace ProxyApp
                 buffer = mstrm.GetBuffer();
                 mstrm.Flush();
             }
-
-            //Console.WriteLine("Data size: " + buffer.Length);
+            
             callback("Received Request: \n" + Encoding.ASCII.GetString(buffer, 0, buffer.Length), Types.request);
 
             Message messageObj = new Message(buffer);
@@ -226,13 +241,11 @@ namespace ProxyApp
 
         private void ForwardRequest(TcpClient server, Action<string, Types> callback, Message request)
         {
-            //Dit is echt heel lelijk, ik start deze stream liever ergens anders. Komt later.
+            //TODO: Dit is echt heel lelijk, ik start deze stream liever ergens anders. Komt later.
             serverStream = server.GetStream();
             if (request != null)
             {
                 byte[] message = request.GetMessageAsByteArray();
-                //Console.WriteLine(message.Length);
-                //Console.WriteLine(request.GetHeadersAsString());
                 callback("Forwarding request:\n" + request.GetHeadersAsString(), Types.log);
                 serverStream.Write(message, 0, message.Length);
                 serverStream.Flush();
@@ -253,8 +266,12 @@ namespace ProxyApp
                 int bytesRead;
                 if (serverStream.CanRead)
                 {
+                    //TODO: Test of dit veranderd kan worden, zodat een tread.sleep niet meer nodig is.
+                    //TODO: Test of Thread.sleep weg kan op de computer, doordat deze snellere connectie heeft (?)
+                    //TODO: Check met een if of dit alleen op de allereerste request nodig is en dat het daarna snel genoeg is (?)
                     Thread.Sleep(500);
                     
+                    //Check is niet nodig als de do-while loop al werkt.
                     if (serverStream.DataAvailable)
                     {
                         do
@@ -268,8 +285,7 @@ namespace ProxyApp
                 buffer = mstrm.GetBuffer();
                 mstrm.Flush();
             }
-
-            //Console.WriteLine("Data size: " + buffer.Length);
+            
             callback("Response received: \n" + Encoding.ASCII.GetString(buffer, 0, buffer.Length), Types.response);
 
             Message messageObj = new Message(buffer);
