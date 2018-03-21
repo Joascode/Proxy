@@ -49,7 +49,7 @@ namespace ProxyApp
             } else
             {
                 listening = true;
-                requestHandler = new RequestHandler(this, port, buffer);
+                requestHandler = new RequestHandler(port, buffer);
                 //TODO: Fix callback to filter out body or headers based on settings.
                 //TODO: Fix callback to work without Types.
                 //TODO: Fix callback to work with errors properly.
@@ -205,8 +205,11 @@ namespace ProxyApp
                 Dispatcher.Invoke(() => AddToLog(request));
                 return;
             }
+
             RequestsList.Add(request);
+
             ClearLogBtn.IsEnabled = true;
+            
         }
     }
 }

@@ -14,11 +14,10 @@ namespace ProxyApp
 {
     class RequestHandler
     {
-        MainWindow window;
-        TcpListener listener;
-        TcpClient client;
-        NetworkStream clientStream;
-        NetworkStream serverStream;
+        private TcpListener listener;
+        private TcpClient client;
+        private NetworkStream clientStream;
+        private NetworkStream serverStream;
         private StringBuilder sb = new StringBuilder();
 
         private Dictionary<string, Message> CachedMessages = new Dictionary<string, Message>();
@@ -103,9 +102,8 @@ namespace ProxyApp
 
         public bool basicAuth = false;
 
-        public RequestHandler(MainWindow window, int port, int bufferSize)
+        public RequestHandler(int port, int bufferSize)
         {
-            this.window = window;
             Port = port;
             BufferSize = bufferSize;
             buffer = new byte[bufferSize];
@@ -155,11 +153,10 @@ namespace ProxyApp
 
                 //Check if request has been made earlier. If so, retrieve response tied to request.
                 //TODO: Check for null return value from GetRequestUrl.
-                Console.WriteLine(request);
                 if(request.GetRequestUrl() != null)
                 {
-                    if (CachedMessages.TryGetValue(request.GetRequestUrl(), out response) && response
-                    != null)
+                    //TODO: Check for changed content first, before getting it from the cache.
+                    if (CachedMessages.TryGetValue(request.GetRequestUrl(), out response))
                     {
                         Console.WriteLine("Returning response from cache.");
                         Console.WriteLine(request.GetRequestUrl());
@@ -179,9 +176,7 @@ namespace ProxyApp
                             ForwardRequest(server, callback, request);
 
                             response = ReceiveResponse(callback);
-
-
-                            //TEST THIS METHOD!
+                            
                             if (blockImages)
                             {
                                 if (response.RequestForImage())
@@ -201,16 +196,17 @@ namespace ProxyApp
                                 {
                                     Console.WriteLine("Authorized.");
                                     ForwardResponse(callback, response);
+
+                                    Console.WriteLine("Adding response to cache.");
+                                    Console.WriteLine(request.GetRequestUrl());
+                                    lock (CachedMessages) CachedMessages.Add(request.GetRequestUrl(), response);
                                 }
                                 else
                                 {
                                     Console.WriteLine("Unauthorized.");
                                 }
                             }
-
-                            lock (CachedMessages) CachedMessages.Add(request.GetRequestUrl(), response);
-
-                            //ForwardResponse(callback, response);
+                            
                         }
                         catch (Exception e) when (
                             e is ArgumentNullException ||
@@ -237,23 +233,12 @@ namespace ProxyApp
 
         private byte[] GetImageAsByteArray()
         {
-            byte[] imgBuffer;
             Stream imgStream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("ProxyApp.images.placeholder.png");
-            using (var mstrm = new MemoryStream())
-            {
-                var tempBuffer = new byte[1024];
-                int bytesRead;
-                do
-                {
-                    bytesRead = imgStream.Read(tempBuffer, 0, tempBuffer.Length);
-                    mstrm.Write(tempBuffer, 0, bytesRead);
 
-                } while (clientStream.DataAvailable);
-                imgBuffer = mstrm.GetBuffer();
-                mstrm.Flush();
-            }
+            var memoryStream = new MemoryStream();
+            imgStream.CopyTo(memoryStream);
 
-            return imgBuffer;
+            return memoryStream.ToArray();
         }
 
         private Message ReceiveRequest(Action<string, Types> callback)
@@ -308,6 +293,7 @@ namespace ProxyApp
 
         private Message ReceiveResponse(Action<string, Types> callback)
         {
+            //bool responseReceived = false;
             //http://www.yoda.arachsys.com/csharp/readbinary.html
             using (var mstrm = new MemoryStream())
             {
@@ -319,8 +305,7 @@ namespace ProxyApp
                     //TODO: Test of Thread.sleep weg kan op de computer, doordat deze snellere connectie heeft (?)
                     //TODO: Check met een if of dit alleen op de allereerste request nodig is en dat het daarna snel genoeg is (?)
                     Thread.Sleep(500);
-                    
-                    //Check is niet nodig als de do-while loop al werkt.
+
                     if (serverStream.DataAvailable)
                     {
                         do

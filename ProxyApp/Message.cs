@@ -21,7 +21,7 @@ namespace ProxyApp
                 byteMessage = value;
             }
         }
-        private bool messageAdjusted = false;
+        //private bool messageAdjusted = false;
         private StringBuilder sb = new StringBuilder();
         private string stringMessage;
         private long date = DateTimeOffset.Now.ToUnixTimeMilliseconds();
@@ -65,7 +65,7 @@ namespace ProxyApp
             string newMessage = sb.ToString();
             sb.Clear();
 
-            messageAdjusted = true;
+            //messageAdjusted = true;
 
             stringMessage = newMessage;
         }
@@ -159,7 +159,7 @@ namespace ProxyApp
             //Console.WriteLine(newHeaders);
             sb.Clear();
 
-            messageAdjusted = true;
+            //messageAdjusted = true;
 
             stringMessage = newHeaders;
         }
@@ -186,6 +186,38 @@ namespace ProxyApp
             string[] splitMessage = message.Split(new[] { "\r\n\r\n", "\n\n" }, StringSplitOptions.None);
 
             return splitMessage;
+        }
+
+        private string GetLastModified()
+        {
+            string[] headers = GetMessageAsStringArray();
+            foreach(string header in headers)
+            {
+                if(header.StartsWith("Last-Modified"))
+                {
+                    string[] lastModifiedHeader = header.Split(' ');
+                    return lastModifiedHeader[1];
+                }
+            }
+            return null;
+        }
+
+        private void SetIfModifiedSince(string value)
+        {
+            string headers = GetHeadersAsString();
+
+            sb.Append(headers);
+            sb.Append("If-Modified-Since: " + value);
+            sb.Append("\r");
+            sb.Append("\n");
+
+            string newHeaders = sb.ToString();
+            Console.WriteLine(newHeaders);
+            sb.Clear();
+
+            //messageAdjusted = true;
+
+            stringMessage = newHeaders;
         }
     }
 }
