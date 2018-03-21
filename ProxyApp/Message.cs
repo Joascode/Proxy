@@ -89,6 +89,21 @@ namespace ProxyApp
             return null;
         }
 
+        public string GetRequestUrl()
+        {
+            string stringHeader = GetHeadersAsString();
+            string[] headers = stringHeader.Split(' ');
+            foreach (string header in headers)
+            {
+                if (header.StartsWith("https:") || header.StartsWith("http:"))
+                {
+                    Console.WriteLine("Url found: " + header);
+                    return header;
+                }
+            }
+            return null;
+        }
+
         //Deze is af.
         public string GetHeadersAsString()
         {

@@ -26,8 +26,10 @@ namespace ProxyApp
         private int port = 8080;
         private int buffer = 1024;
         private bool listening = false;
-        private bool filterRequest = false;
-        private bool filterResponse = false;
+        private bool filterRequestHeaders = false;
+        private bool filterResponseHeaders = false;
+        private bool filterRequestBody = false;
+        private bool filterResponseBody = false;
 
         public MainWindow()
         {
@@ -48,13 +50,16 @@ namespace ProxyApp
             {
                 listening = true;
                 requestHandler = new RequestHandler(this, port, buffer);
+                //TODO: Fix callback to filter out body or headers based on settings.
+                //TODO: Fix callback to work without Types.
+                //TODO: Fix callback to work with errors properly.
                 requestHandler.Listen((string message, RequestHandler.Types reponseType) =>
                 {
                     switch(reponseType)
                     {
                         case RequestHandler.Types.request:
                         {
-                            if (filterRequest) break;
+                            if (filterRequestHeaders) break;
                             else
                             {
                                 AddToLog(message);
@@ -63,7 +68,7 @@ namespace ProxyApp
                         }
                         case RequestHandler.Types.response:
                         {
-                            if (filterResponse) break;
+                            if (filterResponseHeaders) break;
                             else
                             {
                                 AddToLog(message);
@@ -130,6 +135,8 @@ namespace ProxyApp
         private void ClearLogBtn_Click(object sender, RoutedEventArgs e)
         {
             RequestsList.Clear();
+
+            ClearLogBtn.IsEnabled = false;
         }
 
         private void ContentInCheck_Click(object sender, RoutedEventArgs e)
@@ -191,7 +198,7 @@ namespace ProxyApp
             }
         }
 
-        public void AddToLog(string request)
+        private void AddToLog(string request)
         {
             if(!Dispatcher.CheckAccess())
             {
@@ -199,6 +206,7 @@ namespace ProxyApp
                 return;
             }
             RequestsList.Add(request);
+            ClearLogBtn.IsEnabled = true;
         }
     }
 }
