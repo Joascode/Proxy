@@ -108,6 +108,20 @@ namespace ProxyApp
             return null;
         }
 
+        public string GetAuthorizationHeader()
+        {
+            string stringHeader = GetHeadersAsString();
+            string[] headers = stringHeader.Split('\n');
+            foreach (string header in headers)
+            {
+                if (header.StartsWith("Proxy-Authorization:"))
+                {
+                    return header;
+                }
+            }
+            return null;
+        }
+
         public string GetRequestUrl()
         {
             string stringHeader = GetHeadersAsString();
@@ -142,6 +156,7 @@ namespace ProxyApp
             return null;
         }
 
+        //OUDE MANIER VAN BASIC AUTH.
         public void AddBasicAuth()
         {
             string headers = GetHeadersAsString();
@@ -149,6 +164,7 @@ namespace ProxyApp
             string password = "admin";
             string encoded = Convert.ToBase64String(Encoding.GetEncoding("ISO-8859-1").GetBytes(username + ":" + password));
             string[] splitMessage = headers.Split(new[] { "\r\n\r\n", "\n\n" }, StringSplitOptions.None);
+
             sb.Append(splitMessage[0]);
             sb.Append("\n");
             sb.Append("Proxy-Authorization: Basic " + encoded);
@@ -156,26 +172,10 @@ namespace ProxyApp
             sb.Append("\n");
 
             string newHeaders = sb.ToString();
-            //Console.WriteLine(newHeaders);
+
             sb.Clear();
 
-            //messageAdjusted = true;
-
             stringMessage = newHeaders;
-        }
-
-        public byte[] GetMessageAsByteArray()
-        {
-            /*if(messageAdjusted)
-            {
-                Console.WriteLine(stringMessage);
-                string message = stringMessage + "\n" + GetBodyAsString();
-                messageAdjusted = false;
-                return Encoding.ASCII.GetBytes(message);
-            } else
-            {*/
-                return byteMessage;
-            //}
         }
 
         private string[] GetMessageAsStringArray()
@@ -214,8 +214,6 @@ namespace ProxyApp
             string newHeaders = sb.ToString();
             Console.WriteLine(newHeaders);
             sb.Clear();
-
-            //messageAdjusted = true;
 
             stringMessage = newHeaders;
         }

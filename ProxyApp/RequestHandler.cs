@@ -24,6 +24,10 @@ namespace ProxyApp
 
         private static readonly object _lock = new object();
 
+        //public readonly string AUTHRESPONSE = "HTTP/1.1 401 Access Denied\r\nWWW-Authenticate: Basic realm = \"Proxy\"\r\nContent-Length: 0\r\n\r\n";
+        private readonly string AUTHRESPONSE = "HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"Proxy\"\r\nContent-Length: 0\r\n\r\n";
+        private bool authenticated = false;
+
         //private Action<string, Types> callback2;
         public enum Types
         {
@@ -171,13 +175,13 @@ namespace ProxyApp
                         {
                             server.Connect(request.GetHostFromRequest(), 80);
 
-                            if (removeBrowser) request.RemoveBrowserHeader("User-Agent");
+                            //if (removeBrowser) request.RemoveBrowserHeader("User-Agent");
 
-                            ForwardRequest(server, callback, request);
+                            //ForwardRequest(server, callback, request);
 
-                            response = ReceiveResponse(callback);
+                            //response = ReceiveResponse(callback);
                             
-                            if (blockImages)
+                            /*if (blockImages)
                             {
                                 if (response.RequestForImage())
                                 {
@@ -186,11 +190,50 @@ namespace ProxyApp
                                     response.ByteMessage = GetImageAsByteArray();
 
                                 }
-                            }
+                            }*/
 
                             if (basicAuth)
                             {
-                                response.AddBasicAuth();
+
+                                if (!authenticated)
+                                {
+                                    if(CheckAuthentication(request))
+                                    {
+                                        authenticated = true;
+                                    }
+                                    
+                                    else
+                                    {
+                                        ReturnAuthorizationFailed(callback);
+                                    }
+                                }
+                                else if(authenticated)
+                                {
+                                    if (removeBrowser) request.RemoveBrowserHeader("User-Agent");
+
+                                    ForwardRequest(server, callback, request);
+
+                                    response = ReceiveResponse(server, callback);
+
+                                    if (blockImages)
+                                    {
+                                        if (response.RequestForImage())
+                                        {
+                                            Console.WriteLine("Asking for image.");
+                                            response.ByteMessage = GetImageAsByteArray();
+
+                                        }
+                                    }
+
+                                    ForwardResponse(callback, response);
+
+                                    Console.WriteLine("Adding response to cache.");
+                                    Console.WriteLine(request.GetRequestUrl());
+                                    lock (CachedMessages) CachedMessages.Add(request.GetRequestUrl(), response);
+                                }
+
+                                //De oude stijl van basic authentication.
+                                /*response.AddBasicAuth();
                                 //Console.WriteLine(response.GetHeadersAsString());
                                 if (CheckAuthentication(response.GetHeadersAsString()))
                                 {
@@ -204,7 +247,7 @@ namespace ProxyApp
                                 else
                                 {
                                     Console.WriteLine("Unauthorized.");
-                                }
+                                }*/
                             }
                             
                         }
@@ -229,6 +272,13 @@ namespace ProxyApp
             }
             
             client.Close();
+        }
+
+        private void ReturnAuthorizationFailed(Action<string, Types> callback)
+        {
+            byte[] resp = Encoding.ASCII.GetBytes(AUTHRESPONSE);
+            Message response = new Message(resp);
+            ForwardResponse(callback, response);
         }
 
         private byte[] GetImageAsByteArray()
@@ -279,7 +329,7 @@ namespace ProxyApp
             serverStream = server.GetStream();
             if (request != null)
             {
-                byte[] message = request.GetMessageAsByteArray();
+                byte[] message = request.ByteMessage;
                 callback("Forwarding request:\n" + request.GetHeadersAsString(), Types.log);
                 serverStream.Write(message, 0, message.Length);
                 serverStream.Flush();
@@ -291,22 +341,24 @@ namespace ProxyApp
             }
         }
 
-        private Message ReceiveResponse(Action<string, Types> callback)
+        private Message ReceiveResponse(TcpClient server, Action<string, Types> callback)
         {
-            //bool responseReceived = false;
+            byte[] newBuffer;
+            
             //http://www.yoda.arachsys.com/csharp/readbinary.html
-            using (var mstrm = new MemoryStream())
+            /*using (var mstrm = new MemoryStream())
             {
+                
                 var tempBuffer = new byte[1024];
                 int bytesRead;
-                if (serverStream.CanRead)
+                if (stream.CanRead)
                 {
+                    stream.ReadTimeout = 100;
                     //TODO: Test of dit veranderd kan worden, zodat een tread.sleep niet meer nodig is.
                     //TODO: Test of Thread.sleep weg kan op de computer, doordat deze snellere connectie heeft (?)
                     //TODO: Check met een if of dit alleen op de allereerste request nodig is en dat het daarna snel genoeg is (?)
-                    Thread.Sleep(500);
-
-                    if (serverStream.DataAvailable)
+                    /*Thread.Sleep(500);
+                    if(serverStream.DataAvailable)
                     {
                         do
                         {
@@ -314,17 +366,81 @@ namespace ProxyApp
                             mstrm.Write(tempBuffer, 0, bytesRead);
                         } while (serverStream.DataAvailable);
                     }
+                    
+
+                    /*while ((bytesRead = stream.Read(tempBuffer, 0, tempBuffer.Length)) > 0)
+                    {
+                        Console.WriteLine(bytesRead);
+                        mstrm.Write(tempBuffer, 0, bytesRead);
+                    }
                 }
 
-                buffer = mstrm.GetBuffer();
+                newBuffer = mstrm.ToArray();
                 mstrm.Flush();
+            }*/
+            /*byte[] temp = new byte[32768];
+            using (MemoryStream ms = new MemoryStream())
+            {
+                while (true)
+                {
+                    int read = stream.Read(temp, 0, temp.Length);
+                    if (read <= 0)
+                    { 
+                        newBuffer = ms.ToArray();
+                        break;
+                    }
+                    ms.Write(temp, 0, read);
+                }
+            }*/
+
+            byte[] temp = new byte[bufferSize];
+            int read = 0;
+
+            int chunk;
+            using (Stream stream = server.GetStream())
+            try
+            {
+                stream.ReadTimeout = 1000;
+                while ((chunk = stream.Read(temp, read, temp.Length - read)) > 0)
+                {
+                    read += chunk;
+
+                    // If we've reached the end of our buffer, check to see if there's
+                    // any more information
+                    if (read == temp.Length)
+                    {
+                        int nextByte = stream.ReadByte();
+
+                        // End of stream? If so, we're done
+                        if (nextByte == -1)
+                        {
+                            break;
+                        }
+
+                        // Nope. Resize the buffer, put in the byte we've just
+                        // read, and continue
+                        byte[] newBuff = new byte[temp.Length * 2];
+                        Array.Copy(temp, newBuff, temp.Length);
+                        newBuff[read] = (byte)nextByte;
+                        temp = newBuff;
+                        read++;
+                    }
+                }
+            }
+            catch(IOException e)
+            {
+                Console.WriteLine("An error occurred: " + e.Message);
             }
             
-            callback("Response received: \n" + Encoding.ASCII.GetString(buffer, 0, buffer.Length), Types.response);
+            // Buffer is now too big. Shrink it.
+            byte[] ret = new byte[read];
+            Array.Copy(temp, ret, read);
 
-            Message messageObj = new Message(buffer);
+            callback("Response received: \n" + Encoding.ASCII.GetString(ret, 0, ret.Length), Types.response);
 
-            buffer = new byte[bufferSize];
+            Message messageObj = new Message(ret);
+
+            //buffer = new byte[bufferSize];
 
             return messageObj;
         }
@@ -334,14 +450,13 @@ namespace ProxyApp
             
             if (response != null)
             {
-                byte[] message = response.GetMessageAsByteArray();
+                byte[] message = response.ByteMessage;
                 callback("Forwarding response:\n" + response.GetMessageAsLog(), Types.log);
                 clientStream.Write(message, 0, message.Length);
                 clientStream.Flush();
             }
             else
             {
-                //Change to callback function.
                 callback("Requested site is not reachable.", Types.log);
             }
         }
@@ -363,6 +478,7 @@ namespace ProxyApp
             return newMessage;
         }
 
+        [Obsolete("ChangeImageRequest is deprecated, please use GetImageAsByteArray instead.")]
         private string ChangeImageRequest(string request)
         {
             string[] headers = request.Split(' ');
@@ -372,6 +488,7 @@ namespace ProxyApp
             return newUrl;
         }
 
+        [Obsolete("CheckAuthentication(string response) is deprecated, please use CheckAuthentication(Message request) instead.")]
         private bool CheckAuthentication(string response)
         {
             string[] headers = response.Split('\n');
@@ -389,6 +506,26 @@ namespace ProxyApp
                             if(authRow.Equals("Basic " + encoded + "\r")) return true;
                     }
                     
+                }
+            }
+            return false;
+        }
+
+        private bool CheckAuthentication(Message request)
+        {
+            string authHeader = request.GetAuthorizationHeader();
+
+            if (authHeader != null)
+            {
+                string[] auth = authHeader.Split();
+
+                string[] credentials = Encoding.UTF8.GetString(Convert.FromBase64String(auth[auth.Length - 1])).Split(':');
+
+                if (credentials[0] == "admin" && credentials[1] == "admin")
+                {
+
+                    return true;
+
                 }
             }
             return false;

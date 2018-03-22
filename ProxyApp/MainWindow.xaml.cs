@@ -25,6 +25,7 @@ namespace ProxyApp
         public ObservableCollection<string> RequestsList { get; set; }
         private int port = 8080;
         private int buffer = 1024;
+        private int cache = 30000;
         private bool listening = false;
         private bool filterRequestHeaders = false;
         private bool filterResponseHeaders = false;
@@ -125,11 +126,43 @@ namespace ProxyApp
                         if (requestHandler != null)
                         {
                             requestHandler.BufferSize = buffer;
+                            AddToLog($"Changed buffer size to: {buffer}");
                         }
-                        AddToLog($"Changed buffer size to: {buffer}");
+                        else
+                        {
+                            AddToLog("Please start the proxy first.");
+                        }
+                        
                     }
                 }
             } 
+        }
+
+        private void CacheDurationHandler(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Return)
+            {
+                if (int.TryParse(CacheDurationTxt.Text, out cache))
+                {
+                    if (cache <= 0)
+                    {
+                        AddToLog("Please enter a positive cache duration.");
+                    }
+                    else
+                    {
+                        if (requestHandler != null)
+                        {
+                            requestHandler.CacheDuration = cache;
+                            AddToLog($"Changed cache duration to: {buffer}");
+                        }
+                        else
+                        {
+                            AddToLog("Please start the proxy first.");
+                        }
+                        
+                    }
+                }
+            }
         }
 
         private void ClearLogBtn_Click(object sender, RoutedEventArgs e)
