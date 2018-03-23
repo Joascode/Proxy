@@ -13,16 +13,16 @@
         <Button Name="ListenBtn" Content="Start" HorizontalAlignment="Left" Margin="440,10,0,0" VerticalAlignment="Top" Width="129" Click="StartBtn_Click" />
         <TextBox Name="PortNumberTxt" KeyDown="PortChangedHandler" HorizontalAlignment="Left" Height="23" Margin="444,60,0,0" TextWrapping="Wrap" Text="8080" VerticalAlignment="Top" Width="129"/>
         <TextBox Name="CacheDurationTxt" KeyDown="CacheDurationHandler" HorizontalAlignment="Left" Height="23" Margin="444,90,0,0" TextWrapping="Wrap" Text="300" VerticalAlignment="Top" Width="129"/>
-        <CheckBox Content="" HorizontalAlignment="Left" Margin="557,122,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
+        <CheckBox Name="ChangeContentCheckBox" Click="ChangeContentCheck_Click" Content="" HorizontalAlignment="Left" Margin="557,122,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
         <CheckBox Name="ContentFilterCheckBox" Click="ContentFilterCheck_Click" Content="" HorizontalAlignment="Left" Margin="557,149,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
         <CheckBox Name="HeaderEditCheckBox" Click="HeaderEditCheck_Click" Content="" HorizontalAlignment="Left" Margin="557,179,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
         <CheckBox Name="BasicAuthCheckBox" Click="BasicAuthCheck_Click" Content="" HorizontalAlignment="Left" Margin="557,206,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
         <TextBox Name="BufferSizeTxt" KeyDown="BufferSizeChangedHandler" HorizontalAlignment="Left" Height="23" Margin="444,239,0,0" TextWrapping="Wrap" Text="1024" VerticalAlignment="Top" Width="129" />
-        <CheckBox Content="" HorizontalAlignment="Left" Margin="557,277,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
-        <CheckBox Content="" HorizontalAlignment="Left" Margin="557,302,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
+        <CheckBox Name="RequestHeadersCheckBox" Click="RequestHeadersCheck_Click" Content="" HorizontalAlignment="Left" Margin="557,277,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
+        <CheckBox Name="ResponseHeadersCheckBox" Click="ResponseHeadersCheck_Click" Content="" HorizontalAlignment="Left" Margin="557,302,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
         <CheckBox Name="ContentInCheckBox" Click="ContentInCheck_Click" Content="" HorizontalAlignment="Left" Margin="557,328,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
         <CheckBox Name="ContentUitCheckBox" Click="ContentUitCheck_Click" Content="" HorizontalAlignment="Left" Margin="557,356,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
-        <CheckBox Content="" HorizontalAlignment="Left" Margin="557,382,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
+        <CheckBox Name="ClientCheckBox" Click="ClientCheck_Click" Content="" HorizontalAlignment="Left" Margin="557,382,0,0" VerticalAlignment="Top" Height="17" Width="16"/>
         <Label Content="Buffersize" HorizontalAlignment="Left" Margin="330,236,0,0" VerticalAlignment="Top" Width="74"/>
         <Label Content="Auth aan/uit" HorizontalAlignment="Left" Margin="330,200,0,0" VerticalAlignment="Top" Width="74"/>
         <Label Content="Header editing" HorizontalAlignment="Left" Margin="330,170,0,0" VerticalAlignment="Top" Width="95"/>

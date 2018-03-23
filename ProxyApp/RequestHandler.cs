@@ -114,11 +114,12 @@ namespace ProxyApp
         }
 
         //TODO: Fix callback to work without the Types enum. Isn't a clean way to create loosely coupled classes.
-        public async void Listen(Action<string, Types> callback)
+        public async void Listen(Action<Message, string, Types, string> callback)
         {
+            //TODO: Make using so closing happens in here.
             listener = new TcpListener(IPAddress.Any, port);
             listener.Start();
-            callback($"Listening on port: {port}", Types.log);
+            callback(null, null, Types.log, $"Listening on port: {port}");
             while (true)
             {
                 try
@@ -145,10 +146,9 @@ namespace ProxyApp
             listener.Stop();
         }
 
-
         //REVAMP TO SUPPORTS 4-way MESSAGES. Client > Proxy > Server > Proxy > Client.
         //TODO: Clean up this method, because it does too many things now. SOLID isn't implemented.
-        private void HandleMessages(Action<string, Types> callback)
+        private void HandleMessages(Action<Message, string, Types, string> callback)
         {
             using (clientStream = client.GetStream())
             {
@@ -156,7 +156,6 @@ namespace ProxyApp
                 Message response = null;
 
                 //Check if request has been made earlier. If so, retrieve response tied to request.
-                //TODO: Check for null return value from GetRequestUrl.
                 if(request.GetRequestUrl() != null)
                 {
                     //TODO: Check for changed content first, before getting it from the cache.
@@ -175,26 +174,10 @@ namespace ProxyApp
                         {
                             server.Connect(request.GetHostFromRequest(), 80);
 
-                            //if (removeBrowser) request.RemoveBrowserHeader("User-Agent");
-
-                            //ForwardRequest(server, callback, request);
-
-                            //response = ReceiveResponse(callback);
-                            
-                            /*if (blockImages)
-                            {
-                                if (response.RequestForImage())
-                                {
-                                    //response = RequestPlaceholder(PLACEHOLDER_URL);
-                                    Console.WriteLine("Asking for image.");
-                                    response.ByteMessage = GetImageAsByteArray();
-
-                                }
-                            }*/
+                            //Check for changed content on Server.
 
                             if (basicAuth)
                             {
-
                                 if (!authenticated)
                                 {
                                     if(CheckAuthentication(request))
@@ -227,6 +210,9 @@ namespace ProxyApp
 
                                     ForwardResponse(callback, response);
 
+                                    //TODO: Add last-modified to the request before placing into cache.
+
+
                                     Console.WriteLine("Adding response to cache.");
                                     Console.WriteLine(request.GetRequestUrl());
                                     lock (CachedMessages) CachedMessages.Add(request.GetRequestUrl(), response);
@@ -258,23 +244,20 @@ namespace ProxyApp
                             e is ObjectDisposedException
                         )
                         {
-                            callback($"An Error has occurred: {e.Message}", Types.log);
+                            callback(null, null, Types.log, $"An Error has occurred: {e.Message}");
                             Console.WriteLine("Error: " + e.Message);
                         }
                         finally
                         {
                             server.Close();
                         }
-
                     }
-                }                
-                
+                }
             }
-            
             client.Close();
         }
 
-        private void ReturnAuthorizationFailed(Action<string, Types> callback)
+        private void ReturnAuthorizationFailed(Action<Message, string, Types, string> callback)
         {
             byte[] resp = Encoding.ASCII.GetBytes(AUTHRESPONSE);
             Message response = new Message(resp);
@@ -291,12 +274,12 @@ namespace ProxyApp
             return memoryStream.ToArray();
         }
 
-        private Message ReceiveRequest(Action<string, Types> callback)
+        private Message ReceiveRequest(Action<Message, string, Types, string> callback)
         {
             //http://www.yoda.arachsys.com/csharp/readbinary.html <-- place where I caught my example codes to handle stream reads properly.
             using (var mstrm = new MemoryStream())
             {
-                var tempBuffer = new byte[1024];
+                var tempBuffer = new byte[bufferSize];
                 int bytesRead;
                 if (clientStream.CanRead)
                 {
@@ -313,37 +296,36 @@ namespace ProxyApp
                 buffer = mstrm.GetBuffer();
                 mstrm.Flush();
             }
-            
-            callback("Received Request: \n" + Encoding.ASCII.GetString(buffer, 0, buffer.Length), Types.request);
 
             Message messageObj = new Message(buffer);
+
+            callback(messageObj, "Received Request: \n", Types.request, null);
 
             buffer = new byte[bufferSize];
 
             return messageObj;
         }
 
-        private void ForwardRequest(TcpClient server, Action<string, Types> callback, Message request)
+        private void ForwardRequest(TcpClient server, Action<Message, string, Types, string> callback, Message request)
         {
             //TODO: Dit is echt heel lelijk, ik start deze stream liever ergens anders. Komt later.
             serverStream = server.GetStream();
             if (request != null)
             {
                 byte[] message = request.ByteMessage;
-                callback("Forwarding request:\n" + request.GetHeadersAsString(), Types.log);
+                callback(request, "Forwarding request:\n", Types.request, null);
                 serverStream.Write(message, 0, message.Length);
                 serverStream.Flush();
             }
             else
             {
-                //Change to callback function.
-                callback("Requested site is not reachable.", Types.log);
+                callback(null, null, Types.log, "Requested site is not reachable.");
             }
         }
 
-        private Message ReceiveResponse(TcpClient server, Action<string, Types> callback)
+        private Message ReceiveResponse(TcpClient server, Action<Message, string, Types, string> callback)
         {
-            byte[] newBuffer;
+            //byte[] newBuffer;
             
             //http://www.yoda.arachsys.com/csharp/readbinary.html
             /*using (var mstrm = new MemoryStream())
@@ -436,28 +418,26 @@ namespace ProxyApp
             byte[] ret = new byte[read];
             Array.Copy(temp, ret, read);
 
-            callback("Response received: \n" + Encoding.ASCII.GetString(ret, 0, ret.Length), Types.response);
-
             Message messageObj = new Message(ret);
 
-            //buffer = new byte[bufferSize];
+            callback(messageObj, "Response received: \n", Types.response, null);
 
             return messageObj;
         }
 
-        private void ForwardResponse(Action<string, Types> callback, Message response)
+        private void ForwardResponse(Action<Message, string, Types, string> callback, Message response)
         {
             
             if (response != null)
             {
                 byte[] message = response.ByteMessage;
-                callback("Forwarding response:\n" + response.GetMessageAsLog(), Types.log);
+                callback(response, "Forwarding response:\n", Types.response, null);
                 clientStream.Write(message, 0, message.Length);
                 clientStream.Flush();
             }
             else
             {
-                callback("Requested site is not reachable.", Types.log);
+                callback(null, null, Types.log, "Requested site is not reachable.");
             }
         }
 
@@ -478,7 +458,7 @@ namespace ProxyApp
             return newMessage;
         }
 
-        [Obsolete("ChangeImageRequest is deprecated, please use GetImageAsByteArray instead.")]
+        [Obsolete("ChangeImageRequest is deprecated, please use GetImageAsByteArray instead.", true)]
         private string ChangeImageRequest(string request)
         {
             string[] headers = request.Split(' ');
@@ -488,7 +468,7 @@ namespace ProxyApp
             return newUrl;
         }
 
-        [Obsolete("CheckAuthentication(string response) is deprecated, please use CheckAuthentication(Message request) instead.")]
+        [Obsolete("CheckAuthentication(string response) is deprecated, please use CheckAuthentication(Message request) instead.", true)]
         private bool CheckAuthentication(string response)
         {
             string[] headers = response.Split('\n');
@@ -536,12 +516,9 @@ namespace ProxyApp
             List<string> toBeRemovedItems = new List<string>();
             foreach(var Item in CachedMessages)
             {
-                //Console.WriteLine("" + (Item.Value.Date + cacheDuration));
-                //Console.WriteLine("" + DateTimeOffset.Now.ToUnixTimeMilliseconds());
                 if(Item.Value.Date + cacheDuration < DateTimeOffset.Now.ToUnixTimeMilliseconds())
                 {
                     toBeRemovedItems.Add(Item.Key);
-                    //CachedMessages.Remove(Item.Key);
                     Console.WriteLine("Response removed from cache." + Item.Key);
                 }
             }

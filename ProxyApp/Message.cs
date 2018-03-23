@@ -188,7 +188,7 @@ namespace ProxyApp
             return splitMessage;
         }
 
-        private string GetLastModified()
+        public string GetLastModified()
         {
             string[] headers = GetMessageAsStringArray();
             foreach(string header in headers)
@@ -202,7 +202,7 @@ namespace ProxyApp
             return null;
         }
 
-        private void SetIfModifiedSince(string value)
+        public void SetIfModifiedSince(string value)
         {
             string headers = GetHeadersAsString();
 

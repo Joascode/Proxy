@@ -29,8 +29,8 @@ namespace ProxyApp
         private bool listening = false;
         private bool filterRequestHeaders = false;
         private bool filterResponseHeaders = false;
-        private bool filterRequestBody = false;
-        private bool filterResponseBody = false;
+        private bool filterRequest = false;
+        private bool filterResponse = false;
 
         public MainWindow()
         {
@@ -54,31 +54,46 @@ namespace ProxyApp
                 //TODO: Fix callback to filter out body or headers based on settings.
                 //TODO: Fix callback to work without Types.
                 //TODO: Fix callback to work with errors properly.
-                requestHandler.Listen((string message, RequestHandler.Types reponseType) =>
+                //TODO: Work with optional parameters.
+                requestHandler.Listen((Message message, string messagePreFix, RequestHandler.Types reponseType, string log) =>
                 {
                     switch(reponseType)
                     {
                         case RequestHandler.Types.request:
                         {
-                            if (filterRequestHeaders) break;
+                            if (filterRequest) break;
                             else
                             {
-                                AddToLog(message);
+                                if(filterRequestHeaders)
+                                {
+                                    AddToLog(messagePreFix + " " + message.GetBodyAsString());
+                                }
+                                else
+                                {
+                                    AddToLog(messagePreFix + " " + message.GetMessageAsLog());
+                                }
                                 break;
                             }
                         }
                         case RequestHandler.Types.response:
                         {
-                            if (filterResponseHeaders) break;
+                            if (filterResponse) break;
                             else
                             {
-                                AddToLog(message);
+                                if(filterResponseHeaders)
+                                {
+                                    AddToLog(messagePreFix + " " + message.GetBodyAsString());
+                                }
+                                else
+                                {
+                                    AddToLog(messagePreFix + " " + message.GetMessageAsLog());
+                                }
                                 break;
                             }
                         }
                         case RequestHandler.Types.log:
                         {
-                            AddToLog(message);
+                            AddToLog(log);
                             break;
                         }
                     }
@@ -172,15 +187,33 @@ namespace ProxyApp
             ClearLogBtn.IsEnabled = false;
         }
 
+        private void ChangeContentCheck_Click(object sender, RoutedEventArgs e)
+        {
+            ChangeContentCheckBox.IsChecked = false;
+            AddToLog("This function isn't required, see requirements.");
+        }
+
+        private void RequestHeadersCheck_Click(object sender, RoutedEventArgs e)
+        {
+            filterRequestHeaders = (bool)RequestHeadersCheckBox.IsChecked;
+            AddToLog("Filtering out the Request Headers.");
+        }
+
+        private void ResponseHeadersCheck_Click(object sender, RoutedEventArgs e)
+        {
+            filterResponseHeaders = (bool)ResponseHeadersCheckBox.IsChecked;
+            AddToLog("Filtering out the Response Headers.");
+        }
+
         private void ContentInCheck_Click(object sender, RoutedEventArgs e)
         {
-            filterRequestBody = (bool) ContentInCheckBox.IsChecked;
+            filterRequest = (bool) ContentInCheckBox.IsChecked;
             AddToLog("Filtering out the Requests.");
         }
 
         private void ContentUitCheck_Click(object sender, RoutedEventArgs e)
         {
-            filterResponseBody = (bool)ContentUitCheckBox.IsChecked;
+            filterResponse = (bool)ContentUitCheckBox.IsChecked;
             AddToLog("Filtering out the Responses.");
         }
 
@@ -229,6 +262,12 @@ namespace ProxyApp
                 if ((bool)BasicAuthCheckBox.IsChecked) AddToLog("Checking for Authentication");
                 else AddToLog("Blocking unauthicated user.");
             }
+        }
+
+        private void ClientCheck_Click(object sender, RoutedEventArgs e)
+        {
+            AddToLog("I got no clue what this is supposed to do.");
+            ClientCheckBox.IsChecked = false;
         }
 
         private void AddToLog(string request)
